@@ -1,0 +1,552 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// ENUMS DO SISTEMA
+// ----------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  RESELLER
+  SUPPORT
+  ADMIN
+}
+
+enum ProductStatus {
+  ONLINE           // Em estoque e operacional
+  MAINTENANCE      // Em manutenção (congela tempo se configurado)
+  OUT_OF_STOCK     // Sem chaves disponíveis
+  DISABLED         // Oculto da loja
+}
+
+enum DurationType {
+  HOURS
+  DAYS
+  LIFETIME
+}
+
+enum StockType {
+  BATCH            // Consome chaves pré-carregadas na tabela LicenseKey
+  AUTO_GENERATED   // Gera chave aleatória sob demanda no pagamento
+}
+
+enum KeyStatus {
+  UNASSIGNED       // Em estoque (disponível para venda)
+  RESERVED         // Bloqueada para um checkout em andamento (timeout 15 min)
+  NOT_ACTIVATED    // Comprada pelo usuário, mas ainda não ativada no software (tempo não iniciado)
+  ACTIVE           // Atribuída a um usuário e ativa (tempo correndo)
+  FROZEN           // Congelada administrativamente (produto em manutenção)
+  EXPIRED          // Tempo de duração esgotado
+  REVOKED          // Cancelada por estorno, chargeback ou banimento
+}
+
+enum OrderStatus {
+  PENDING          // Aguardando pagamento
+  PROCESSING       // Pagamento recebido, alocando chaves
+  COMPLETED        // Pago e chaves entregues
+  CANCELLED        // Expirado por inatividade
+  REFUNDED         // Reembolsado voluntariamente
+  DISPUTED         // Chargeback aberto no gateway
+}
+
+enum PaymentGateway {
+  MERCADOPAGO
+  ASAAS
+  STRIPE
+  CRYPTO
+}
+
+enum PaymentMethod {
+  PIX
+  CREDIT_CARD
+  CRYPTO
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CHARGEBACK
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum ServiceHealthStatus {
+  OPERATIONAL
+  DEGRADED
+  MAINTENANCE
+  OUTAGE
+}
+
+enum HWIDRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BlacklistType {
+  EMAIL
+  IP
+  HWID
+  DISCORD_ID
+  USERNAME
+}
+
+enum ActorType {
+  USER
+  ADMIN
+  SYSTEM
+  LOADER
+  BOT
+}
+
+// ----------------------------------------------------
+// USUÁRIOS E AUTENTICAÇÃO
+// ----------------------------------------------------
+
+model User {
+  id                 String    @id @default(uuid())
+  username           String    @unique // Usado na loja e no Loader
+  email              String    @unique
+  fullName           String
+  passwordHash       String?   // Nulo se autenticado puramente por OAuth
+  role               Role      @default(CUSTOMER)
+  
+  // Vínculos de Provedores
+  googleId           String?   @unique
+  discordId          String?   @unique // Vínculo 1:1 rigoroso
+  discordUsername    String?
+  isDiscordVerified  Boolean   @default(false)
+  avatarUrl          String?
+  
+  // Controle de Acesso
+  isBanned           Boolean   @default(false)
+  banReason          String?
+  lastLoginIp        String?
+  lastLoginAt        DateTime?
+  
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relações
+  accounts           Account[]
+  sessions           Session[]
+  orders             Order[]
+  licenses           LicenseKey[]
+  reviews            Review[]
+  hwidRequests       HWIDResetRequest[]
+  auditLogs          AuditLog[]
+
+  @@index([email])
+  @@index([username])
+  @@index([discordId])
+}
+
+model Account {
+  id                 String  @id @default(uuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ----------------------------------------------------
+// PRODUTOS E VARIANTES
+// ----------------------------------------------------
+
+model Product {
+  id               String         @id @default(uuid())
+  slug             String         @unique
+  name             String
+  shortDescription String
+  fullDescription  String         @db.Text
+  category         String         @default("Software")
+  status           ProductStatus  @default(ONLINE)
+  
+  // Mídia Adaptativa
+  videoUrl         String?        // Link YouTube/Vimeo ou MP4
+  images           String[]       // Lista de URLs de screenshots/banners
+  
+  // Especificações e Compatibilidade (JSON)
+  specifications   Json?          // Ex: {"os": "Windows 10/11", "processor": "Intel & AMD"}
+  features         String[]       // Lista de bullet points de destaques
+  
+  // Integração Discord
+  discordRoleId    String?        // Cargo opcional específico para compradores deste produto
+  
+  // Gestão de Arquivos do Loader
+  downloadFileName String?
+  downloadFileUrl  String?        // Chave do bucket no S3/R2 para download seguro
+  currentVersion   String?        @default("1.0.0")
+  
+  isFeatured       Boolean        @default(false)
+  orderPriority    Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relações
+  variants         ProductVariant[]
+  licenseKeys      LicenseKey[]
+  reviews          Review[]
+  changelogs       Changelog[]
+  orderItems       OrderItem[]
+  statusService    StatusService?
+
+  @@index([slug])
+  @@index([status])
+}
+
+model ProductVariant {
+  id                  String       @id @default(uuid())
+  productId           String
+  name                String       // Ex: "Diário", "Semanal", "Mensal", "Vitalício"
+  durationValue       Int          // Ex: 1, 7, 30, 0
+  durationType        DurationType // HOURS, DAYS, LIFETIME
+  priceCents          Int          // Valor em centavos (ex: 2990 = R$ 29,90)
+  compareAtPriceCents Int?         // Preço riscado para promoção
+  stockType           StockType    @default(BATCH)
+  isActive            Boolean      @default(true)
+  orderPriority       Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  product             Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  licenseKeys         LicenseKey[]
+  orderItems          OrderItem[]
+
+  @@index([productId])
+}
+
+// ----------------------------------------------------
+// GESTÃO DE LICENÇAS E HWID
+// ----------------------------------------------------
+
+model LicenseKey {
+  id                 String         @id @default(uuid())
+  key                String         @unique // Formato ex: ABCD-EFGH-IJKL-MNOP
+  productId          String
+  variantId          String
+  
+  // Vinculação da Compra / Atribuição
+  orderId            String?
+  userId             String?
+  status             KeyStatus      @default(UNASSIGNED)
+  
+  // Reserva Atômica (para não vender duas vezes durante checkout)
+  reservedUntil      DateTime?
+  
+  // Controle de Tempo e Duração
+  activatedAt        DateTime?      // Inicia na primeira validação no loader/site
+  expiresAt          DateTime?      // Calculado: activatedAt + variant duration
+  
+  // Freeze Time (Congelamento em Manutenção)
+  freezeStartedAt    DateTime?
+  totalFrozenSeconds Int            @default(0) // Tempo a ser somado no unfreeze
+  
+  // Controle de Hardware (HWID)
+  hwid               String?
+  lastHwidResetAt    DateTime?
+  
+  // Metadados
+  createdBatchId     String?        // Para rastrear importações em lote
+  notes              String?        // Ex: "Chave cortesia para tester"
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  // Relações
+  product            Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant            ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  order              Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user               User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  hwidRequests       HWIDResetRequest[]
+
+  @@index([key])
+  @@index([status])
+  @@index([userId])
+  @@index([productId, status])
+  @@index([variantId, status])
+}
+
+model HWIDResetRequest {
+  id           String            @id @default(uuid())
+  licenseKeyId String
+  userId       String
+  currentHwid  String?
+  newHwid      String?
+  reason       String?
+  status       HWIDRequestStatus @default(PENDING)
+  ipAddress    String?
+  reviewedBy   String?           // ID do admin que aprovou/rejeitou
+  reviewedAt   DateTime?
+  createdAt    DateTime          @default(now())
+
+  licenseKey   LicenseKey        @relation(fields: [licenseKeyId], references: [id], onDelete: Cascade)
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([licenseKeyId])
+  @@index([userId])
+}
+
+// ----------------------------------------------------
+// PEDIDOS, PAGAMENTOS E CUPONS
+// ----------------------------------------------------
+
+model Order {
+  id             String         @id @default(uuid())
+  orderNumber    String         @unique // Ex: ORD-2026-98124
+  userId         String
+  status         OrderStatus    @default(PENDING)
+  
+  subtotalCents  Int
+  discountCents  Int            @default(0)
+  totalCents     Int
+  
+  couponId       String?
+  customerIp     String?
+  userAgent      String?
+  
+  paidAt         DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // Relações
+  user           User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  coupon         Coupon?        @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+  payments       Payment[]
+  licenseKeys    LicenseKey[]
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+}
+
+model OrderItem {
+  id             String         @id @default(uuid())
+  orderId        String
+  productId      String
+  variantId      String
+  quantity       Int            @default(1)
+  unitPriceCents Int
+  totalPriceCents Int
+
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant        ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+}
+
+model Payment {
+  id                String         @id @default(uuid())
+  orderId           String
+  gateway           PaymentGateway
+  gatewayPaymentId  String         @unique // ID de transação retornado pela API externa
+  status            PaymentStatus  @default(PENDING)
+  method            PaymentMethod
+  
+  amountCents       Int
+  
+  // Redirecionamento e Dados de Pagamento
+  checkoutUrl       String?        // URL de redirecionamento (Stripe Checkout, Mercado Pago, etc.)
+  pixQrCode         String?        @db.Text
+  pixQrCodeText     String?        @db.Text
+  pixExpiresAt      DateTime?
+  cryptoAddress     String?
+  
+  rawPayload        Json?          // Payload original do webhook para auditoria
+  paidAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([gatewayPaymentId])
+}
+
+model Coupon {
+  id             String        @id @default(uuid())
+  code           String        @unique // Ex: FIRSTBUY20
+  discountType   DiscountType
+  discountValue  Int           // % (ex: 15) ou centavos (ex: 1000 = R$ 10,00)
+  minOrderCents  Int?          @default(0)
+  maxUses        Int?          // Limite geral de ativações
+  usedCount      Int           @default(0)
+  maxUsesPerUser Int?          @default(1)
+  isActive       Boolean       @default(true)
+  validFrom      DateTime      @default(now())
+  validUntil     DateTime?
+  createdAt      DateTime      @default(now())
+
+  orders         Order[]
+
+  @@index([code])
+}
+
+// ----------------------------------------------------
+// PÁGINA DE STATUS ENTERPRISE E CHANGELOGS
+// ----------------------------------------------------
+
+model StatusService {
+  id               String              @id @default(uuid())
+  name             String              // Ex: "Loader de Autenticação", "Software Apex", "Servidor de Licenças"
+  slug             String              @unique
+  description      String?
+  status           ServiceHealthStatus @default(OPERATIONAL)
+  uptimePercentage Float               @default(99.9)
+  
+  // Vínculo opcional direto com um Produto da loja
+  productId        String?             @unique
+  product          Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  orderPriority    Int                 @default(0)
+  updatedAt        DateTime            @updatedAt
+
+  incidents        StatusIncident[]
+  historyBars      ServiceDailyUptime[]
+
+  @@index([slug])
+}
+
+model StatusIncident {
+  id          String              @id @default(uuid())
+  serviceId   String
+  title       String              // Ex: "Instabilidade na injeção após atualização do jogo"
+  description String              @db.Text
+  status      ServiceHealthStatus
+  isResolved  Boolean             @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  service     StatusService       @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+}
+
+model ServiceDailyUptime {
+  id          String        @id @default(uuid())
+  serviceId   String
+  date        DateTime      @db.Date
+  status      ServiceHealthStatus
+  uptimePct   Float         @default(100.0)
+
+  service     StatusService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, date])
+  @@index([serviceId])
+}
+
+model Changelog {
+  id              String    @id @default(uuid())
+  productId       String
+  version         String    // Ex: "v2.4.1"
+  title           String
+  contentMarkdown String    @db.Text
+  isPublished     Boolean   @default(true)
+  releaseDate     DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+// ----------------------------------------------------
+// AVALIAÇÕES (REVIEWS)
+// ----------------------------------------------------
+
+model Review {
+  id                 String    @id @default(uuid())
+  productId          String
+  userId             String
+  rating             Int       // 1 a 5 estrelas
+  comment            String    @db.Text
+  isVerifiedPurchase Boolean   @default(true)
+  isApproved         Boolean   @default(false) // Moderação do admin
+  discordMessageId   String?   // Se espelhado no Discord
+  createdAt          DateTime  @default(now())
+
+  product            Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([userId])
+}
+
+// ----------------------------------------------------
+// AUDITORIA E SEGURANÇA (BLACKLIST & LOGS)
+// ----------------------------------------------------
+
+model AuditLog {
+  id         String    @id @default(uuid())
+  userId     String?
+  actorType  ActorType @default(SYSTEM)
+  action     String    // Ex: "LICENSE_ALLOCATED", "HWID_RESET_APPROVED", "DISCORD_LINKED", "MAINTENANCE_TRIGGERED"
+  entityType String    // "Order", "LicenseKey", "User", "Product"
+  entityId   String
+  ipAddress  String?
+  userAgent  String?
+  metadata   Json?     // Detalhes extras antes/depois da alteração
+  createdAt  DateTime  @default(now())
+
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([userId])
+}
+
+model Blacklist {
+  id        String        @id @default(uuid())
+  type      BlacklistType
+  value     String        // O IP, E-mail, HWID ou Discord ID bloqueado
+  reason    String?
+  createdBy String?       // Admin que inseriu
+  createdAt DateTime      @default(now())
+
+  @@unique([type, value])
+  @@index([type, value])
+}

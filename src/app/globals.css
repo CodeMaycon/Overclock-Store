@@ -1,26 +1,138 @@
 @import "tailwindcss";
 
+@theme {
+  --color-tertiary-container: #88ab97;
+  --color-on-primary-fixed-variant: #005236;
+  --color-surface-tint: #4edea3;
+  --color-surface-bright: #363a38;
+  --color-on-tertiary-container: #1f3f30;
+  --color-secondary-container: #00bd85;
+  --color-error: #ffb4ab;
+  --color-on-secondary-container: #00452e;
+  --color-surface-container-lowest: #0b0f0d;
+  --color-on-surface-variant: #bbcabf;
+  --color-on-primary-fixed: #002113;
+  --color-tertiary-fixed-dim: #abcfb9;
+  --color-primary-fixed-dim: #4edea3;
+  --color-inverse-surface: #e0e3df;
+  --color-secondary-fixed-dim: #45dfa4;
+  --color-on-error: #690005;
+  --color-outline: #86948a;
+  --color-surface-dim: #101412;
+  --color-on-secondary: #003825;
+  --color-on-tertiary-fixed-variant: #2d4d3d;
+  --color-on-secondary-fixed: #002114;
+  --color-inverse-on-surface: #2d312f;
+  --color-tertiary: #abcfb9;
+  --color-surface-container-high: #272b28;
+  --color-secondary: #45dfa4;
+  --color-on-error-container: #ffdad6;
+  --color-surface-container-low: #181c1a;
+  --color-primary-fixed: #6ffbbe;
+  --color-primary-container: #10b981;
+  --color-surface-container: #1c201e;
+  --color-secondary-fixed: #68fcbf;
+  --color-on-tertiary: #163627;
+  --color-surface-variant: #323633;
+  --color-background: #101412;
+  --color-error-container: #93000a;
+  --color-surface-container-highest: #323633;
+  --color-on-secondary-fixed-variant: #005137;
+  --color-inverse-primary: #006c49;
+  --color-outline-variant: #3c4a42;
+  --color-tertiary-fixed: #c6ebd5;
+  --color-on-background: #e0e3df;
+  --color-on-primary: #003824;
+  --color-on-surface: #e0e3df;
+  --color-surface: #101412;
+  --color-on-primary-container: #00422b;
+  --color-primary: #4edea3;
+  --color-on-tertiary-fixed: #002113;
+
+  --font-display-xl: "Space Grotesk", sans-serif;
+  --font-headline-lg: "Space Grotesk", sans-serif;
+  --font-headline-md: "Space Grotesk", sans-serif;
+  --font-headline-sm: "Space Grotesk", sans-serif;
+  --font-body-lg: "Geist", sans-serif;
+  --font-body-md: "Geist", sans-serif;
+  --font-body-sm: "Geist", sans-serif;
+  --font-label-md: "Geist", sans-serif;
+  --font-label-sm: "Geist", sans-serif;
+  --font-mono-data: "JetBrains Mono", monospace;
+  --font-mono-badge: "JetBrains Mono", monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --bg-main: #0b0f0d;
+  --surface-container-lowest: #0b0f0d;
+  --surface-container-low: #181c1a;
+  --surface-container: #1c201e;
+  --surface-container-high: #272b28;
+  --primary-container: #10b981;
+  --primary: #4edea3;
+  --on-surface: #e0e3df;
+  --on-surface-variant: #bbcabf;
+  --outline: #86948a;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #0b0f0d;
+  color: #e0e3df;
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Material Symbols icon support */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Smooth Marquee Animation */
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 28s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Spinner Animation Guarantee */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  display: inline-block;
+  transform-origin: center;
+  animation: spin 0.85s linear infinite !important;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  display: none;
 }

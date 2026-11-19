@@ -1,0 +1,65 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+    }
+
+    const orders = await prisma.order.findMany({
+      where: { userId: session.user.id },
+      include: {
+        items: {
+          include: {
+            product: { select: { name: true, slug: true, category: true } },
+            variant: { select: { name: true } },
+          },
+        },
+        payments: {
+          select: {
+            method: true,
+            gateway: true,
+            status: true,
+          },
+          take: 1,
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const formatted = orders.map((ord) => {
+      const primaryItem = ord.items[0];
+      const payment = ord.payments[0];
+
+      return {
+        id: ord.id,
+        orderNumber: ord.orderNumber,
+        status: ord.status,
+        productName: primaryItem ? primaryItem.product.name : "Licença de Software",
+        productSlug: primaryItem ? primaryItem.product.slug : "",
+        variantName: primaryItem ? primaryItem.variant.name : "",
+        amountCents: ord.totalCents,
+        amountFormatted: `R$ ${(ord.totalCents / 100).toFixed(2).replace(".", ",")}`,
+        paymentMethod: payment?.method || "PIX",
+        createdAt: ord.createdAt.toLocaleDateString("pt-BR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        paidAt: ord.paidAt,
+      };
+    });
+
+    return NextResponse.json({ success: true, orders: formatted });
+  } catch (error: any) {
+    console.error("[GET_CLIENT_ORDERS_ERROR]", error);
+    return NextResponse.json({ error: "Erro ao buscar histórico de pedidos." }, { status: 500 });
+  }
+}
