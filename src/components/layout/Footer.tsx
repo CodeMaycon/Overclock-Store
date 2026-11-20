@@ -12,7 +12,7 @@ export function Footer() {
               <img
                 src="/logo.png"
                 alt="OVERCLOCK STORE"
-                className="h-12 sm:h-14 w-auto object-contain"
+                className="h-10 sm:h-12 w-auto object-contain"
               />
             </Link>
             <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">

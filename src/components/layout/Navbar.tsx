@@ -38,7 +38,7 @@ export function Navbar() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 px-4 lg:px-12 transition-all duration-300 ${
         isScrolled
-          ? "bg-[#050706]/90 backdrop-blur-md border-b border-white/[0.08] py-2 shadow-lg shadow-black/20"
+          ? "bg-[#050706]/35 backdrop-blur-xl border-b border-white/[0.05] py-2 shadow-sm shadow-black/10"
           : "bg-transparent border-b border-transparent py-2.5"
       }`}
     >
@@ -49,7 +49,7 @@ export function Navbar() {
           <img
             src="/logo.png"
             alt="OVERCLOCK STORE"
-            className="h-11 sm:h-14 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+            className="h-9 sm:h-11 md:h-12 w-auto max-w-[220px] sm:max-w-[270px] object-contain transition-transform duration-200 group-hover:scale-105"
           />
         </Link>
 
