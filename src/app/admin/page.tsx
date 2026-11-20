@@ -44,7 +44,8 @@ import {
   AlertCircle,
   EyeOff,
   Gift,
-  Copy
+  Copy,
+  Star
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/lib/auth-context";
@@ -247,7 +248,7 @@ function centsToBr(cents: number): string {
 export default function AdminBackofficePage() {
   const { user } = useAuth();
   const [activeAdminTab, setActiveAdminTab] = useState<
-    "overview" | "products" | "orders" | "users" | "status" | "coupons" | "audit"
+    "overview" | "products" | "orders" | "users" | "status" | "coupons" | "audit" | "reviews"
   >("overview");
 
   // Dados Reais do Banco
@@ -306,6 +307,12 @@ export default function AdminBackofficePage() {
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [auditSearch, setAuditSearch] = useState("");
+
+  // Estados Reais de Avaliações (Reviews)
+  const [adminReviews, setAdminReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [reviewFilter, setReviewFilter] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [reviewCounts, setReviewCounts] = useState({ all: 0, pending: 0, approved: 0 });
 
   // Modais Administrativos
   const [freezeModalOpen, setFreezeModalOpen] = useState(false);
@@ -434,10 +441,10 @@ export default function AdminBackofficePage() {
   ) => {
     const isReturn = action === "RETURN_TO_STOCK";
     const promptMsg = isReturn
-      ? `Deseja desvincular a chave "${keyDisplay}" e devolvê-la ao estoque disponível para venda? Digite o motivo (opcional):`
-      : `Deseja revogar permanentemente a chave "${keyDisplay}"? Digite o motivo:`;
+      ? `⚠️ ATENÇÃO: Esta chave pode já ter sido visualizada pelo cliente no painel ou por e-mail. Permitido apenas para chaves não ativadas (NOT_ACTIVATED). Deseja desvincular "${keyDisplay}" e devolvê-la ao estoque disponível para venda? Digite o motivo (opcional):`
+      : `Confirma a revogação permanente da chave "${keyDisplay}" na Overclock Store? O cliente perderá o acesso imediatamente. Digite o motivo:`;
 
-    const reason = window.prompt(promptMsg, isReturn ? "Devolução manual ao estoque" : "Revogação administrativa");
+    const reason = window.prompt(promptMsg, isReturn ? "Devolução manual ao estoque (não ativada)" : "Revogação administrativa");
     if (reason === null) return;
 
     try {
@@ -921,6 +928,60 @@ export default function AdminBackofficePage() {
     }
   }, []);
 
+  // Carregar avaliações
+  const loadReviews = useCallback(async () => {
+    setLoadingReviews(true);
+    try {
+      const url =
+        reviewFilter === "ALL"
+          ? "/api/admin/reviews"
+          : `/api/admin/reviews?status=${reviewFilter}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        setAdminReviews(data.reviews || []);
+        if (data.counts) setReviewCounts(data.counts);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar avaliações:", err);
+    } finally {
+      setLoadingReviews(false);
+    }
+  }, [reviewFilter]);
+
+  const handleToggleReviewApproval = async (reviewId: string, currentApproved: boolean) => {
+    try {
+      const res = await fetch(`/api/admin/reviews/${reviewId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isApproved: !currentApproved }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao atualizar moderação da avaliação.");
+      showAdminToast(data.message || "Avaliação atualizada!");
+      loadReviews();
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    }
+  };
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!window.confirm("Deseja realmente excluir permanentemente esta avaliação? Esta ação será registrada na auditoria.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/reviews/${reviewId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir avaliação.");
+      showAdminToast("Avaliação excluída com sucesso!");
+      loadReviews();
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     loadAdminData();
     loadOrders();
@@ -937,7 +998,8 @@ export default function AdminBackofficePage() {
     if (activeAdminTab === "status") loadStatusServices();
     if (activeAdminTab === "coupons") loadCoupons();
     if (activeAdminTab === "audit") loadAuditLogs();
-  }, [activeAdminTab, loadOverview, loadUsers, loadBlacklist, loadHwidRequests, loadStatusServices, loadCoupons, loadAuditLogs]);
+    if (activeAdminTab === "reviews") loadReviews();
+  }, [activeAdminTab, reviewFilter, loadOverview, loadUsers, loadBlacklist, loadHwidRequests, loadStatusServices, loadCoupons, loadAuditLogs, loadReviews]);
 
   useEffect(() => {
     if (activeAdminTab === "products" && productSubTab === "keys") {
@@ -1314,6 +1376,7 @@ export default function AdminBackofficePage() {
     { id: "status", label: "Status & Freeze Time", icon: Snowflake },
     { id: "coupons", label: "Cupons de Desconto", icon: Ticket },
     { id: "audit", label: "Auditoria & Logs", icon: FileText },
+    { id: "reviews", label: "Avaliações", icon: Star },
   ];
 
   return (
@@ -2073,13 +2136,15 @@ export default function AdminBackofficePage() {
                                   <div className="flex items-center justify-end gap-1.5">
                                     {k.user && (
                                       <>
-                                        <button
-                                          onClick={() => handleManageLicense(k.id, "RETURN_TO_STOCK", k.key)}
-                                          className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] transition-colors cursor-pointer"
-                                          title="Desvincular do cliente e devolver ao estoque"
-                                        >
-                                          Devolver ao Estoque
-                                        </button>
+                                        {(k.status === "NOT_ACTIVATED" || k.status === "UNASSIGNED") && (
+                                          <button
+                                            onClick={() => handleManageLicense(k.id, "RETURN_TO_STOCK", k.key)}
+                                            className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                            title="Desvincular do cliente e devolver ao estoque (apenas não ativadas)"
+                                          >
+                                            Devolver ao Estoque
+                                          </button>
+                                        )}
                                         {k.status !== "REVOKED" && (
                                           <button
                                             onClick={() => handleManageLicense(k.id, "REVOKE", k.key)}
@@ -2960,6 +3025,158 @@ export default function AdminBackofficePage() {
                         })}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 8: AVALIAÇÕES (REVIEWS) */}
+          {activeAdminTab === "reviews" && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/8">
+                <div>
+                  <h2 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
+                    <Star className="w-4 h-4 text-amber-400 fill-current" />
+                    <span>Moderação de Avaliações de Clientes</span>
+                  </h2>
+                  <p className="text-xs text-[#86948a]">
+                    Gerencie, aprove ou oculte depoimentos enviados por clientes autenticados com compras verificadas.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#0b0f0d] border border-white/8 self-start sm:self-auto font-mono text-xs">
+                  <button
+                    onClick={() => setReviewFilter("ALL")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      reviewFilter === "ALL"
+                        ? "bg-[#10b981] text-[#050706] font-bold"
+                        : "text-[#86948a] hover:text-white"
+                    }`}
+                  >
+                    Todas ({reviewCounts.all})
+                  </button>
+                  <button
+                    onClick={() => setReviewFilter("PENDING")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      reviewFilter === "PENDING"
+                        ? "bg-amber-400 text-[#050706] font-bold"
+                        : "text-amber-400/80 hover:text-amber-300"
+                    }`}
+                  >
+                    Pendentes ({reviewCounts.pending})
+                  </button>
+                  <button
+                    onClick={() => setReviewFilter("APPROVED")}
+                    className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                      reviewFilter === "APPROVED"
+                        ? "bg-[#10b981] text-[#050706] font-bold"
+                        : "text-[#10b981]/80 hover:text-[#10b981]"
+                    }`}
+                  >
+                    Publicadas ({reviewCounts.approved})
+                  </button>
+                </div>
+              </div>
+
+              {loadingReviews ? (
+                <div className="py-16 text-center text-[#86948a] font-mono text-xs flex items-center justify-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin text-[#10b981]" />
+                  <span>Carregando avaliações do banco de dados...</span>
+                </div>
+              ) : adminReviews.length === 0 ? (
+                <div className="p-12 text-center rounded-2xl bg-[#0b0f0d] border border-white/8 text-xs text-[#86948a] font-mono space-y-2">
+                  <Star className="w-8 h-8 text-amber-400/30 mx-auto" />
+                  <p className="text-white font-bold font-['Space_Grotesk'] text-sm">
+                    Nenhuma avaliação encontrada
+                  </p>
+                  <p>
+                    {reviewFilter === "PENDING"
+                      ? "Não há avaliações aguardando moderação no momento."
+                      : reviewFilter === "APPROVED"
+                      ? "Nenhuma avaliação pública aprovada até o momento."
+                      : "Ainda não existem avaliações registradas por clientes."}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {adminReviews.map((rev) => (
+                    <div
+                      key={rev.id}
+                      className="p-5 rounded-2xl bg-[#0b0f0d] border border-white/8 space-y-3 hover:border-white/15 transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1 text-amber-400">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`w-3.5 h-3.5 ${
+                                  i < rev.rating ? "fill-current" : "text-white/20"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <span className="font-['Space_Grotesk'] font-bold text-white text-xs">
+                            {rev.product?.name || "Produto"}
+                          </span>
+                          {rev.order && (
+                            <span className="text-[10px] font-mono text-[#86948a]">
+                              ({rev.order.orderNumber})
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                              rev.isApproved
+                                ? "bg-[#10b981]/15 text-[#10b981]"
+                                : "bg-amber-500/15 text-amber-300"
+                            }`}
+                          >
+                            {rev.isApproved ? "PUBLICADA" : "PENDENTE DE APROVAÇÃO"}
+                          </span>
+                          <span className="text-[11px] font-mono text-[#86948a]">
+                            {new Date(rev.createdAt).toLocaleDateString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-[#e0e3df] leading-relaxed italic bg-black/20 p-3 rounded-xl border border-white/5">
+                        "{rev.comment}"
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-[11px] font-mono text-[#86948a]">
+                        <div>
+                          Cliente: <strong className="text-white">{rev.user?.name || "Sem nome"}</strong> ({rev.user?.email})
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleReviewApproval(rev.id, rev.isApproved)}
+                            className={`px-3 py-1.5 rounded-lg font-['Space_Grotesk'] font-bold text-xs transition-colors cursor-pointer ${
+                              rev.isApproved
+                                ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300"
+                                : "bg-[#10b981] hover:bg-[#34d399] text-[#050706]"
+                            }`}
+                          >
+                            {rev.isApproved ? "Ocultar Avaliação" : "Aprovar & Publicar"}
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteReview(rev.id)}
+                            className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-['Space_Grotesk'] font-bold text-xs transition-colors cursor-pointer"
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -3980,13 +4197,15 @@ export default function AdminBackofficePage() {
                               </td>
                               <td className="p-2.5 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => handleManageLicense(lic.id, "RETURN_TO_STOCK", lic.key)}
-                                    className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] transition-colors cursor-pointer"
-                                    title="Desvincular e Devolver ao Estoque"
-                                  >
-                                    Devolver ao Estoque
-                                  </button>
+                                  {(lic.status === "NOT_ACTIVATED" || lic.status === "UNASSIGNED") && (
+                                    <button
+                                      onClick={() => handleManageLicense(lic.id, "RETURN_TO_STOCK", lic.key)}
+                                      className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                      title="Desvincular e Devolver ao Estoque (apenas não ativadas)"
+                                    >
+                                      Devolver ao Estoque
+                                    </button>
+                                  )}
                                   {lic.status !== "REVOKED" && (
                                     <button
                                       onClick={() => handleManageLicense(lic.id, "REVOKE", lic.key)}

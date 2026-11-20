@@ -40,7 +40,22 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
     const adminUser = auth.session!.user;
 
+    // Mascarar chave para auditoria (não expor chave integral)
+    const maskedKey = key.key.length > 8
+      ? `${key.key.slice(0, 4)}-****-****-${key.key.slice(-4)}`
+      : "****";
+
     if (action === "RETURN_TO_STOCK") {
+      // Regra de segurança: apenas chaves NOT_ACTIVATED ou UNASSIGNED podem voltar ao estoque
+      if (key.status !== KeyStatus.NOT_ACTIVATED && key.status !== KeyStatus.UNASSIGNED) {
+        return NextResponse.json(
+          {
+            error: `Apenas chaves não ativadas (NOT_ACTIVATED) podem ser devolvidas ao estoque com segurança. Chaves com status "${key.status}" devem ser revogadas definitivamente.`,
+          },
+          { status: 400 }
+        );
+      }
+
       const updatedNotes = [
         key.notes,
         `[${new Date().toISOString()}] Desvinculada de @${key.user?.username || key.userId || "desconhecido"} e devolvida ao estoque por ${adminUser.email}. Motivo: ${reason || "Devolução manual"}`,
@@ -63,7 +78,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         },
       });
 
-      // Registra evento na tabela de Auditoria
+      // Registra evento na tabela de Auditoria com chave mascarada
       await prisma.auditLog.create({
         data: {
           userId: adminUser.id,
@@ -72,13 +87,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           entityType: "LicenseKey",
           entityId: key.id,
           metadata: {
-            key: key.key,
+            maskedKey,
             product: key.product?.name,
             variant: key.variant?.name,
+            orderId: key.orderId,
             previousUserId: key.userId,
             previousUserEmail: key.user?.email,
             previousUsername: key.user?.username,
             previousStatus: key.status,
+            newStatus: KeyStatus.UNASSIGNED,
             reason: reason || "Chave desvinculada do cliente e retornada ao estoque disponível",
           },
         },
@@ -94,7 +111,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (action === "REVOKE") {
       const updatedNotes = [
         key.notes,
-        `[${new Date().toISOString()}] Revogada por ${adminUser.email}. Motivo: ${reason || "Revogação administrativa"}`,
+        `[${new Date().toISOString()}] Revogada na Overclock Store por ${adminUser.email}. Motivo: ${reason || "Revogação administrativa"}`,
       ]
         .filter(Boolean)
         .join(" | ");
@@ -107,7 +124,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         },
       });
 
-      // Registra evento na tabela de Auditoria
+      // Registra evento na tabela de Auditoria com chave mascarada
       await prisma.auditLog.create({
         data: {
           userId: adminUser.id,
@@ -116,13 +133,15 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           entityType: "LicenseKey",
           entityId: key.id,
           metadata: {
-            key: key.key,
+            maskedKey,
             product: key.product?.name,
             variant: key.variant?.name,
+            orderId: key.orderId,
             userId: key.userId,
             userEmail: key.user?.email,
             username: key.user?.username,
             previousStatus: key.status,
+            newStatus: KeyStatus.REVOKED,
             reason: reason || "Chave revogada pelo administrador",
           },
         },
@@ -130,7 +149,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
       return NextResponse.json({
         success: true,
-        message: "Chave revogada com sucesso!",
+        message: "Chave revogada com sucesso no sistema da Overclock Store!",
         key: updated,
       });
     }

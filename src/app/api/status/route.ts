@@ -1,65 +1,82 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/status - Telemetria e integridade dos serviços
+// GET /api/status - Status real dos produtos e serviços
 export async function GET() {
   try {
-    const services = await prisma.statusService.findMany({
-      orderBy: { orderPriority: "asc" },
-      include: {
-        incidents: {
-          where: { isResolved: false },
-          orderBy: { createdAt: "desc" },
-          take: 1,
+    const [services, products] = await Promise.all([
+      prisma.statusService.findMany({
+        orderBy: { orderPriority: "asc" },
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              category: true,
+              status: true,
+              currentVersion: true,
+              updatedAt: true,
+            },
+          },
+          incidents: {
+            where: { isResolved: false },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
-        historyBars: {
-          orderBy: { date: "desc" },
-          take: 30,
+      }),
+      prisma.product.findMany({
+        orderBy: [{ orderPriority: "desc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          category: true,
+          status: true,
+          currentVersion: true,
+          updatedAt: true,
         },
-      },
-    });
+      }),
+    ]);
 
-    const formatted = services.map((srv) => {
-      // Gera array de 30 barras para o gráfico
-      const bars = Array.from({ length: 30 }).map((_, idx) => {
-        if (srv.status === "MAINTENANCE" && idx >= 28) return "DEGRADED";
-        if (srv.status === "DEGRADED" && idx >= 27) return "DEGRADED";
-        return "UP";
-      });
+    const formattedServices = services.map((srv) => ({
+      id: srv.id,
+      name: srv.name,
+      slug: srv.slug,
+      category: srv.product?.category || "Serviço",
+      status: srv.status,
+      version: srv.product?.currentVersion || null,
+      productSlug: srv.product?.slug || null,
+      lastUpdatedAt: srv.updatedAt.toISOString(),
+      currentIncident: srv.incidents[0]
+        ? {
+            title: srv.incidents[0].title,
+            description: srv.incidents[0].description,
+            status: srv.incidents[0].status,
+            updatedAt: srv.incidents[0].updatedAt.toISOString(),
+          }
+        : null,
+    }));
 
-      return {
-        id: srv.id,
-        name: srv.name,
-        slug: srv.slug,
-        category: "Nó do Sistema",
-        status: srv.status,
-        uptimePercentage: srv.uptimePercentage,
-        historyBars: bars,
-        currentIncident: srv.incidents[0]
-          ? {
-              title: srv.incidents[0].title,
-              description: srv.incidents[0].description,
-              status: srv.incidents[0].status,
-              updatedAt: new Date(srv.incidents[0].updatedAt).toLocaleTimeString("pt-BR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            }
-          : null,
-      };
-    });
-
-    const averageUptime = services.length > 0
-      ? Number((services.reduce((acc, s) => acc + s.uptimePercentage, 0) / services.length).toFixed(2))
-      : 99.98;
+    const formattedProducts = products.map((prod) => ({
+      id: prod.id,
+      name: prod.name,
+      slug: prod.slug,
+      category: prod.category,
+      status: prod.status,
+      version: prod.currentVersion || "1.0.0",
+      updatedAt: prod.updatedAt.toISOString(),
+    }));
 
     return NextResponse.json({
       success: true,
-      overallUptime: averageUptime,
-      services: formatted,
+      services: formattedServices,
+      products: formattedProducts,
+      totalCount: formattedServices.length + formattedProducts.length,
     });
   } catch (error: any) {
     console.error("[PUBLIC_GET_STATUS_ERROR]", error);
-    return NextResponse.json({ error: "Erro ao obter telemetria de status." }, { status: 500 });
+    return NextResponse.json({ error: "Erro ao obter status dos serviços e produtos." }, { status: 500 });
   }
 }

@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-11-20T15:03:13.291Z",
+  "counts": {
+    "users": 1,
+    "products": 0,
+    "variants": 0,
+    "keys": 0,
+    "orders": 0,
+    "payments": 0,
+    "coupons": 0,
+    "reviews": 0,
+    "changelogs": 0,
+    "statusServices": 3,
+    "auditLogs": 1
+  },
+  "users": [
+    {
+      "id": "5b5ff4d0-4434-4344-8de3-95f78bc7a285",
+      "email": "maycon.sm7@hotmail.com",
+      "username": "maycao",
+      "role": "ADMIN",
+      "isBanned": false,
+      "createdAt": "2026-11-20T05:11:22.982Z"
+    }
+  ],
+  "products": [],
+  "variants": [],
+  "keys": [],
+  "orders": [],
+  "payments": [],
+  "coupons": [],
+  "reviews": [],
+  "changelogs": [],
+  "statusServices": [
+    {
+      "id": "2dfc3825-11dc-4174-9f06-abbadbfc7b84",
+      "name": "Infraestrutura de Autenticação & API",
+      "slug": "auth-api-cluster",
+      "description": "Clusters distribuídos de autenticação e validação de tokens",
+      "status": "OPERATIONAL",
+      "uptimePercentage": 99.99,
+      "productId": null,
+      "orderPriority": 1,
+      "updatedAt": "2026-11-20T13:40:31.378Z"
+    },
+    {
+      "id": "c9c951a0-c717-4f23-b19d-196a4b8b34ed",
+      "name": "Serviço de Injeção & Drivers Ring-0",
+      "slug": "kernel-injection-engine",
+      "description": "Carregamento seguro de drivers e integridade de memória",
+      "status": "OPERATIONAL",
+      "uptimePercentage": 99.95,
+      "productId": null,
+      "orderPriority": 2,
+      "updatedAt": "2026-11-20T13:40:38.758Z"
+    },
+    {
+      "id": "b12b16d4-28c5-462c-9ee9-3af37a5df058",
+      "name": "Sistema de Freeze Time Preventivo",
+      "slug": "freeze-time-controller",
+      "description": "Congelamento automático de tempo durante updates de patches",
+      "status": "OPERATIONAL",
+      "uptimePercentage": 100,
+      "productId": null,
+      "orderPriority": 4,
+      "updatedAt": "2026-11-20T13:40:42.805Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "e55cefb5-cb89-4e44-9dd3-07dec8404b75",
+      "userId": "5b5ff4d0-4434-4344-8de3-95f78bc7a285",
+      "actorType": "ADMIN",
+      "action": "PRODUCTION_DATABASE_INITIALIZED",
+      "entityType": "System",
+      "entityId": "OVERCLOCK_STORE",
+      "ipAddress": null,
+      "userAgent": null,
+      "metadata": {
+        "timestamp": "2026-11-20T14:51:29.800Z",
+        "adminEmail": "maycon.sm7@hotmail.com",
+        "description": "Limpeza de dados mockups concluída. Base pronta para cadastro dos produtos reais das parcerias."
+      },
+      "createdAt": "2026-11-20T14:51:29.803Z"
+    }
+  ]
+}

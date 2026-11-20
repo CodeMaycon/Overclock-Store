@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { MOCK_PRODUCTS, Product } from "@/lib/mock-data";
+import { Product } from "@/lib/mock-data";
 
 export default function CatalogPage() {
   const [productsList, setProductsList] = useState<Product[]>([]);
@@ -32,6 +32,10 @@ export default function CatalogPage() {
     loadCatalog();
   }, []);
 
+  const categories = useMemo(() => {
+    return Array.from(new Set(productsList.map((p) => p.category).filter(Boolean)));
+  }, [productsList]);
+
   // Filtro e Ordenação
   const filteredProducts = useMemo(() => {
     let result = [...productsList];
@@ -48,12 +52,7 @@ export default function CatalogPage() {
     }
 
     if (selectedCategory !== "all") {
-      result = result.filter((p) => {
-        if (selectedCategory === "os") return p.category.toLowerCase().includes("battle") || p.slug.includes("apex");
-        if (selectedCategory === "dev") return p.category.toLowerCase().includes("compet") || p.slug.includes("val");
-        if (selectedCategory === "security") return p.category.toLowerCase().includes("fps") || p.slug.includes("warzone");
-        return true;
-      });
+      result = result.filter((p) => p.category === selectedCategory);
     }
 
     if (sortBy === "price-asc") {
@@ -86,16 +85,15 @@ export default function CatalogPage() {
           <div className="flex flex-col gap-1 max-w-3xl">
             <div className="flex items-center gap-2">
               <div className="px-2 py-0.5 rounded bg-surface-container text-primary font-mono-badge text-[11px] uppercase tracking-wider flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-                ESTOQUE EM TEMPO REAL
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                CATÁLOGO DE PRODUTOS
               </div>
-              <span className="font-mono-badge text-[11px] text-outline">SERVIDOR BR-01</span>
             </div>
             <h1 className="font-headline-lg text-3xl sm:text-4xl lg:font-display-xl lg:text-5xl text-on-surface tracking-tight uppercase font-bold">
-              Catálogo de Softwares &amp; <span className="text-primary">Licenças</span>
+              Softwares &amp; <span className="text-primary">Licenças</span>
             </h1>
             <p className="font-body-md text-sm text-on-surface-variant leading-relaxed">
-              Catálogo completo de softwares corporativos, sistemas de precisão, módulos de segurança e drivers Ring-0. Despacho automatizado em sub-segundos.
+              Confira recursos, compatibilidade e status antes de comprar. Chave liberada no Painel do Cliente e no e-mail após a confirmação do Pix.
             </p>
           </div>
 
@@ -104,12 +102,12 @@ export default function CatalogPage() {
             <div className="flex flex-col pr-4 border-r border-white/10">
               <span className="font-mono-badge text-[10px] text-outline">TOTAL DISPONÍVEL</span>
               <span className="font-headline-sm text-base text-on-surface font-bold">
-                {filteredProducts.length} Produtos
+                {filteredProducts.length} {filteredProducts.length === 1 ? "Produto" : "Produtos"}
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="font-mono-badge text-[10px] text-primary">ENVIO MÉDIO</span>
-              <span className="font-headline-sm text-base text-primary font-bold">0.42s</span>
+              <span className="font-mono-badge text-[10px] text-primary">CHECKOUT PIX</span>
+              <span className="font-headline-sm text-base text-primary font-bold">Mercado Pago</span>
             </div>
           </div>
         </div>
@@ -199,38 +197,21 @@ export default function CatalogPage() {
                   : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
               }`}
             >
-              Todos os Softwares ({productsList.length})
+              Todos os Produtos ({productsList.length})
             </button>
-            <button
-              onClick={() => setSelectedCategory("os")}
-              className={`whitespace-nowrap px-4 py-1.5 rounded-full font-mono-badge text-xs transition-all ${
-                selectedCategory === "os"
-                  ? "bg-primary-container text-on-primary-container font-semibold"
-                  : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-              }`}
-            >
-              Sistemas &amp; Kernel
-            </button>
-            <button
-              onClick={() => setSelectedCategory("dev")}
-              className={`whitespace-nowrap px-4 py-1.5 rounded-full font-mono-badge text-xs transition-all ${
-                selectedCategory === "dev"
-                  ? "bg-primary-container text-on-primary-container font-semibold"
-                  : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-              }`}
-            >
-              Ferramentas de Dev
-            </button>
-            <button
-              onClick={() => setSelectedCategory("security")}
-              className={`whitespace-nowrap px-4 py-1.5 rounded-full font-mono-badge text-xs transition-all ${
-                selectedCategory === "security"
-                  ? "bg-primary-container text-on-primary-container font-semibold"
-                  : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-              }`}
-            >
-              Segurança &amp; DMA
-            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`whitespace-nowrap px-4 py-1.5 rounded-full font-mono-badge text-xs transition-all ${
+                  selectedCategory === cat
+                    ? "bg-primary-container text-on-primary-container font-semibold"
+                    : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                }`}
+              >
+                {cat} ({productsList.filter((p) => p.category === cat).length})
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -276,7 +257,11 @@ export default function CatalogPage() {
                 >
                   <div className="flex items-center gap-4 w-full sm:w-auto">
                     <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-container-lowest shrink-0 border border-white/5">
-                      <img src={prod.images[0]} alt={prod.name} className="w-full h-full object-cover" />
+                      <img
+                        src={prod.images?.[0] || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop"}
+                        alt={prod.name}
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -295,7 +280,7 @@ export default function CatalogPage() {
                       <span className="font-headline-sm text-lg font-bold text-on-surface">
                         R$ {minPrice.toFixed(2).replace(".", ",")}
                       </span>
-                      <span className="block font-mono-badge text-[10px] text-primary">● Em Estoque</span>
+                      <span className="block font-mono-badge text-[10px] text-primary">● Disponível</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Link
@@ -326,7 +311,7 @@ export default function CatalogPage() {
                   <div className="flex items-center justify-between gap-2 mb-4">
                     {isFeatured ? (
                       <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-bold bg-primary-container text-on-primary-container whitespace-nowrap shrink-0">
-                        MAIS VENDIDO
+                        DESTAQUE
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-semibold bg-surface-container text-primary whitespace-nowrap shrink-0">
@@ -336,23 +321,23 @@ export default function CatalogPage() {
 
                     <span className="inline-flex items-center gap-1 font-mono-badge text-[11px] text-primary whitespace-nowrap shrink-0">
                       <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-                      Entrega Imediata ({35 + idx * 12} keys)
+                      Entrega após Confirmação
                     </span>
                   </div>
 
                   {/* Thumbnail HUD Box */}
                   <div className="relative w-full h-[140px] rounded-lg bg-surface-container-lowest/80 overflow-hidden mb-4 flex flex-col items-center justify-center border border-white/5">
                     <img
-                      src={prod.images[0]}
+                      src={prod.images?.[0] || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop"}
                       alt={prod.name}
                       className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(16,185,129,0.18)_0%,_transparent_75%)]" />
                     <span className="font-mono-badge text-mono-badge uppercase tracking-widest text-primary relative z-10 font-bold">
-                      {prod.category} • ATIVAÇÃO RÁPIDA
+                      {prod.category} • ATIVAÇÃO DIGITAL
                     </span>
                     <span className="font-body-sm text-body-sm text-outline relative z-10 text-xs">
-                      Proteção Ring-0 com Licença Criptografada
+                      Licença liberada no painel e por e-mail
                     </span>
                   </div>
 

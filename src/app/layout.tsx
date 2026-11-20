@@ -5,8 +5,8 @@ import { Footer } from "@/components/layout/Footer";
 import { Suspense } from "react";
 
 export const metadata: Metadata = {
-  title: "OVERCLOCK STORE // Licenças Digitais e Softwares de Alta Performance",
-  description: "A melhor loja de licenças digitais de software com entrega instantânea automatizada, proteção de HWID e suporte 24/7.",
+  title: "Overclock Store // Licenças Digitais, Spoofers e Utilitários para PC",
+  description: "Overclock Store — Licenças digitais, spoofers e utilitários para PC com entrega automática via Pix, status transparente e suporte em português.",
   icons: {
     icon: [
       { url: "/favicon.png", type: "image/png" },
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark scroll-smooth">
+    <html lang="pt-BR" className="dark scroll-smooth">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

@@ -25,6 +25,15 @@ export async function GET(req: NextRequest) {
           take: 1,
           orderBy: { createdAt: "desc" },
         },
+        reviews: {
+          select: {
+            id: true,
+            rating: true,
+            isApproved: true,
+            createdAt: true,
+          },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -32,6 +41,7 @@ export async function GET(req: NextRequest) {
     const formatted = orders.map((ord) => {
       const primaryItem = ord.items[0];
       const payment = ord.payments[0];
+      const review = ord.reviews[0];
 
       return {
         id: ord.id,
@@ -39,6 +49,7 @@ export async function GET(req: NextRequest) {
         status: ord.status,
         productName: primaryItem ? primaryItem.product.name : "Licença de Software",
         productSlug: primaryItem ? primaryItem.product.slug : "",
+        productId: primaryItem ? primaryItem.productId : null,
         variantName: primaryItem ? primaryItem.variant.name : "",
         amountCents: ord.totalCents,
         amountFormatted: `R$ ${(ord.totalCents / 100).toFixed(2).replace(".", ",")}`,
@@ -51,6 +62,9 @@ export async function GET(req: NextRequest) {
           minute: "2-digit",
         }),
         paidAt: ord.paidAt,
+        hasReview: !!review,
+        reviewStatus: review ? (review.isApproved ? "PUBLISHED" : "PENDING") : null,
+        reviewRating: review?.rating || null,
       };
     });
 

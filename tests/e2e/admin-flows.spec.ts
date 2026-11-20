@@ -401,7 +401,7 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
     await expect(page.locator("body")).toContainText("@admin_overclock");
   });
 
-  test("10. Revogação e Devolução ao Estoque de Chave Atribuída a Cliente", async ({ page }) => {
+  test("10. Revogação e Devolução ao Estoque de Chave Atribuída a Cliente (NOT_ACTIVATED)", async ({ page }) => {
     // Intercepta confirmações de prompt para retorno ao estoque / revogação
     page.on("dialog", async (dialog) => {
       await dialog.accept("Devolução ao estoque solicitada pelo cliente.");
@@ -473,7 +473,7 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
                   {
                     id: "lic-assigned-101",
                     key: "OVLK-PREM-9999",
-                    status: "ACTIVE",
+                    status: "NOT_ACTIVATED",
                     product: { name: "Software Pro" },
                     variant: { name: "Mensal" },
                   },
@@ -508,7 +508,7 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
     await expect(page.locator("body")).toContainText("Licenças Digitais do Cliente");
     await expect(page.locator("body")).toContainText("OVLK-PREM-9999");
 
-    // Verifica presença dos botões de gestão da chave
+    // Verifica presença dos botões de gestão da chave não ativada
     const returnStockBtn = page.locator("button:has-text('Devolver ao Estoque')").first();
     const revokeBtn = page.locator("button:has-text('Revogar')").first();
     await expect(returnStockBtn).toBeVisible();
@@ -519,5 +519,169 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
 
     // Valida que a licença foi desvinculada e o modal atualizou
     await expect(page.locator("body")).toContainText("Nenhuma licença atribuída a este usuário.");
+  });
+
+  test("11. Segurança: Chave já ativada (ACTIVE) oculta Devolver ao Estoque e permite apenas Revogar", async ({ page }) => {
+    page.on("dialog", async (dialog) => {
+      await dialog.accept("Revogação por solicitação ou estorno");
+    });
+
+    await page.route("**/api/admin/overview", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          kpis: {
+            totalRevenueCents: 0,
+            totalRevenueFormatted: "R$ 0,00",
+            completedOrders: 0,
+            completedOrdersCount: 0,
+            pendingOrders: 0,
+            totalUsers: 1,
+            totalResellers: 0,
+          },
+          lowStockAlerts: [],
+          recentOrders: [],
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/users", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          users: [
+            {
+              id: "usr-active-client",
+              username: "cliente_ativo",
+              fullName: "Cliente Ativo",
+              email: "ativo@cliente.com",
+              role: "CUSTOMER",
+              isBanned: false,
+              orderCount: 1,
+              licenseCount: 1,
+            },
+          ],
+        }),
+      });
+    });
+
+    let revoked = false;
+
+    await page.route("**/api/admin/users/usr-active-client", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          user: {
+            id: "usr-active-client",
+            username: "cliente_ativo",
+            fullName: "Cliente Ativo",
+            email: "ativo@cliente.com",
+            role: "CUSTOMER",
+            isBanned: false,
+            createdAt: "2026-01-10T00:00:00.000Z",
+            orders: [],
+            licenses: [
+              {
+                id: "lic-active-999",
+                key: "OVLK-ACTIVE-KEY-999",
+                status: revoked ? "REVOKED" : "ACTIVE",
+                product: { name: "Software Ativo" },
+                variant: { name: "Mensal" },
+              },
+            ],
+          },
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/licenses/lic-active-999", async (route) => {
+      const json = await route.request().postDataJSON();
+      expect(json.action).toBe("REVOKE");
+      revoked = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          message: "Chave revogada com sucesso no sistema da Overclock Store!",
+        }),
+      });
+    });
+
+    await page.goto("/admin");
+    const usersTab = page.locator("button:has-text('Clientes & Blacklist')").first();
+    await usersTab.click();
+
+    await page.locator("button:has-text('Detalhes')").first().click();
+    await expect(page.locator("body")).toContainText("OVLK-ACTIVE-KEY-999");
+
+    // Devolver ao estoque NÃO deve existir para chave ACTIVE
+    const returnBtn = page.locator("button:has-text('Devolver ao Estoque')");
+    await expect(returnBtn).not.toBeVisible();
+
+    // Botão Revogar deve estar presente e funcional
+    const revokeBtn = page.locator("button:has-text('Revogar')").first();
+    await expect(revokeBtn).toBeVisible();
+    await revokeBtn.click();
+  });
+
+  test("12. Moderação de Avaliações (/admin): Visualização, filtros e aprovação", async ({ page }) => {
+    let isApproved = false;
+
+    await page.route("**/api/admin/reviews*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          counts: { all: 1, pending: isApproved ? 0 : 1, approved: isApproved ? 1 : 0 },
+          reviews: [
+            {
+              id: "rev-adm-1",
+              rating: 5,
+              comment: "Produto funcionando perfeitamente sem problemas!",
+              isApproved,
+              isVerifiedPurchase: true,
+              createdAt: "2026-11-20T10:00:00.000Z",
+              product: { id: "p1", name: "Apex Pro", slug: "apex-pro" },
+              user: { id: "u1", name: "Maycon Souza", email: "cliente@teste.com" },
+              order: { id: "o1", orderNumber: "ORD-2026-9001" },
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/reviews/rev-adm-1", async (route) => {
+      const data = await route.request().postDataJSON();
+      isApproved = data.isApproved;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          message: "Avaliação aprovada e publicada com sucesso.",
+        }),
+      });
+    });
+
+    await page.goto("/admin");
+    const reviewsTab = page.locator("button:has-text('Avaliações')").first();
+    await reviewsTab.click();
+
+    await expect(page.locator("body")).toContainText("Moderação de Avaliações de Clientes");
+    await expect(page.locator("body")).toContainText("Apex Pro");
+    await expect(page.locator("body")).toContainText("cliente@teste.com");
+    await expect(page.locator("body")).toContainText("PENDENTE DE APROVAÇÃO");
+
+    // Aprova a avaliação
+    const approveBtn = page.locator("button:has-text('Aprovar & Publicar')").first();
+    await approveBtn.click();
   });
 });

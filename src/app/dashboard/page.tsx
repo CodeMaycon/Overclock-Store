@@ -27,9 +27,10 @@ import {
   Play, 
   Terminal, 
   LogOut, 
-  Store,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Star,
+  Store
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/lib/auth-context";
@@ -60,12 +61,16 @@ interface ClientOrder {
   status: string;
   productName: string;
   productSlug: string;
+  productId?: string | null;
   variantName: string;
   amountCents: number;
   amountFormatted: string;
   paymentMethod: string;
   createdAt: string;
   paidAt?: string | null;
+  hasReview?: boolean;
+  reviewStatus?: "PUBLISHED" | "PENDING" | null;
+  reviewRating?: number | null;
 }
 
 export default function CustomerDashboardPage() {
@@ -93,6 +98,65 @@ export default function CustomerDashboardPage() {
   const [redeemLoading, setRedeemLoading] = useState(false);
   const [redeemSuccessMsg, setRedeemSuccessMsg] = useState<string | null>(null);
   const [redeemErrorMsg, setRedeemErrorMsg] = useState<string | null>(null);
+
+  // Modal de Avaliação de Compra
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedOrderForReview, setSelectedOrderForReview] = useState<ClientOrder | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
+  const [reviewErrorMsg, setReviewErrorMsg] = useState<string | null>(null);
+
+  const handleOpenReviewModal = (ord: ClientOrder) => {
+    setSelectedOrderForReview(ord);
+    setReviewRating(5);
+    setReviewComment("");
+    setReviewErrorMsg(null);
+    setReviewSuccessMsg(null);
+    setReviewModalOpen(true);
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedOrderForReview) return;
+    if (reviewComment.trim().length < 3) {
+      setReviewErrorMsg("O comentário deve ter no mínimo 3 caracteres.");
+      return;
+    }
+    setReviewLoading(true);
+    setReviewErrorMsg(null);
+    try {
+      const res = await fetch("/api/client/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: selectedOrderForReview.id,
+          productId: selectedOrderForReview.productId || undefined,
+          rating: reviewRating,
+          comment: reviewComment,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao registrar avaliação.");
+      }
+      setReviewSuccessMsg(data.message || "Avaliação enviada com sucesso! Ela passará por moderação antes de ser publicada.");
+      showToast("Avaliação enviada para moderação com sucesso!");
+      // Atualizar lista de pedidos localmente
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === selectedOrderForReview.id
+            ? { ...o, hasReview: true, reviewStatus: "PENDING", reviewRating }
+            : o
+        )
+      );
+    } catch (err: any) {
+      setReviewErrorMsg(err.message);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   // Perfil Completo com Discord
   const [clientProfile, setClientProfile] = useState<any>(null);
@@ -734,13 +798,49 @@ export default function CustomerDashboardPage() {
                               </span>
                             </td>
                             <td className="p-4 text-right">
-                              <Link
-                                href={`/order/${ord.id}`}
-                                className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white font-['Space_Grotesk'] text-xs font-bold inline-flex items-center gap-1 transition-colors"
-                              >
-                                <span>Ver</span>
-                                <ExternalLink className="w-3 h-3 text-[#10b981]" />
-                              </Link>
+                              <div className="flex items-center justify-end gap-2">
+                                {ord.status === "COMPLETED" && (
+                                  <>
+                                    {ord.hasReview ? (
+                                      <span
+                                        className={`px-2 py-1 rounded text-[10px] font-mono font-bold flex items-center gap-1 ${
+                                          ord.reviewStatus === "PUBLISHED"
+                                            ? "bg-[#10b981]/15 text-[#10b981]"
+                                            : "bg-amber-500/15 text-amber-300"
+                                        }`}
+                                        title={
+                                          ord.reviewStatus === "PUBLISHED"
+                                            ? "Avaliação aprovada e visível publicamente"
+                                            : "Avaliação enviada, aguardando moderação"
+                                        }
+                                      >
+                                        <Star className="w-2.5 h-2.5 fill-current" />
+                                        <span>
+                                          {ord.reviewStatus === "PUBLISHED"
+                                            ? `Avaliado (${ord.reviewRating || 5}★)`
+                                            : "Em Análise"}
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleOpenReviewModal(ord)}
+                                        className="px-2.5 py-1.5 rounded-lg bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] font-['Space_Grotesk'] text-xs font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                                      >
+                                        <Star className="w-3 h-3 fill-current" />
+                                        <span>Avaliar Compra</span>
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+
+                                <Link
+                                  href={`/order/${ord.id}`}
+                                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white font-['Space_Grotesk'] text-xs font-bold inline-flex items-center gap-1 transition-colors"
+                                >
+                                  <span>Ver</span>
+                                  <ExternalLink className="w-3 h-3 text-[#10b981]" />
+                                </Link>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1022,6 +1122,131 @@ export default function CustomerDashboardPage() {
                   >
                     {redeemLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     <span>Vincular à Conta</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: AVALIAR COMPRA */}
+      {reviewModalOpen && selectedOrderForReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="rounded-2xl bg-[#0b0f0d] max-w-md w-full p-6 border border-white/15 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-white/8">
+              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-400 fill-current" />
+                <span>Avaliar Compra</span>
+              </h3>
+              <button
+                onClick={() => setReviewModalOpen(false)}
+                className="text-gray-500 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {reviewSuccessMsg ? (
+              <div className="p-4 rounded-xl bg-[#10b981]/15 border border-[#10b981]/30 text-center space-y-3">
+                <CheckCircle2 className="w-8 h-8 text-[#10b981] mx-auto" />
+                <h4 className="font-['Space_Grotesk'] text-sm font-bold text-white">
+                  Avaliação Enviada!
+                </h4>
+                <p className="text-xs text-[#bbcabf] leading-relaxed">
+                  {reviewSuccessMsg}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setReviewModalOpen(false)}
+                  className="mt-2 px-4 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] text-[#050706] hover:bg-[#34d399] transition-colors cursor-pointer"
+                >
+                  Concluir
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReview} className="space-y-4">
+                <div className="p-3 rounded-xl bg-white/5 border border-white/5 space-y-1">
+                  <div className="text-[11px] font-mono text-[#86948a] uppercase">PRODUTO ADQUIRIDO:</div>
+                  <div className="text-xs font-bold text-white font-['Space_Grotesk']">
+                    {selectedOrderForReview.productName} ({selectedOrderForReview.variantName})
+                  </div>
+                  <div className="text-[10px] font-mono text-[#10b981]">
+                    Pedido: {selectedOrderForReview.orderNumber}
+                  </div>
+                </div>
+
+                {reviewErrorMsg && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{reviewErrorMsg}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-mono text-[#86948a] block mb-2">
+                    SUA NOTA (1 A 5 ESTRELAS):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setReviewRating(star)}
+                        className="p-1 rounded hover:scale-110 transition-transform cursor-pointer"
+                      >
+                        <Star
+                          className={`w-6 h-6 transition-colors ${
+                            star <= reviewRating
+                              ? "text-amber-400 fill-current"
+                              : "text-white/20"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                    <span className="text-xs font-mono font-bold text-white ml-2">
+                      {reviewRating} de 5
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-mono text-[#86948a] block mb-1">
+                    SEU COMENTÁRIO (EXPERIÊNCIA COM O SOFTWARE):
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Conte o que achou da instalação, suporte e funcionamento..."
+                    maxLength={1000}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-xs text-white placeholder-[#86948a] focus:outline-none focus:border-[#10b981] resize-none"
+                  />
+                  <div className="text-[10px] font-mono text-[#86948a] text-right mt-1">
+                    {reviewComment.length} / 1000 caracteres (mín. 3)
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-[11px] text-[#86948a] leading-relaxed">
+                  🛡️ Sua avaliação receberá a badge <strong className="text-white">Compra Verificada</strong> após moderação pela equipe da Overclock Store.
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setReviewModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs text-[#86948a] hover:text-white cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reviewLoading}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] text-[#050706] hover:bg-[#34d399] transition-colors shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {reviewLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Enviar Avaliação</span>
                   </button>
                 </div>
               </form>

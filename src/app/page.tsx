@@ -2,402 +2,255 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { 
+  ShoppingBag, 
+  ShieldCheck, 
+  Clock, 
+  HelpCircle, 
+  MessageSquare, 
+  CheckCircle2, 
+  AlertTriangle, 
+  ExternalLink,
+  ChevronDown,
+  Star,
+  Zap,
+  ArrowRight
+} from "lucide-react";
 
 export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [products, setProducts] = useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [approvedReviews, setApprovedReviews] = useState<any[]>([]);
 
   useEffect(() => {
-    async function loadFeaturedProducts() {
+    async function loadData() {
       try {
-        const res = await fetch("/api/products?featured=true", { cache: "no-store" });
-        const data = await res.json();
-        if (data.success && Array.isArray(data.products)) {
-          setProducts(data.products);
-        } else {
-          setProducts([]);
+        const [prodRes, revRes] = await Promise.all([
+          fetch("/api/products?featured=true", { cache: "no-store" }),
+          fetch("/api/reviews", { cache: "no-store" }),
+        ]);
+
+        if (prodRes.ok) {
+          const prodData = await prodRes.json();
+          if (prodData.success && Array.isArray(prodData.products)) {
+            setProducts(prodData.products);
+          } else {
+            setProducts([]);
+          }
+        }
+
+        if (revRes.ok) {
+          const revData = await revRes.json();
+          if (revData.success && Array.isArray(revData.reviews)) {
+            setApprovedReviews(revData.reviews);
+          }
         }
       } catch (e) {
-        console.error("Erro ao carregar produtos da vitrine:", e);
-        setProducts([]);
+        console.error("Erro ao carregar dados da Home:", e);
       } finally {
         setIsLoadingProducts(false);
       }
     }
-    loadFeaturedProducts();
+
+    loadData();
   }, []);
 
   const marqueeItems = [
-    { text: "[⚡ Precisão em Nível de Kernel]", icon: "memory", highlight: true },
-    { text: "[🛡️ Proteção Zero-Trace & HWID]", icon: "security" },
-    { text: "[🔄 Sincronização Automática em Nuvem]", icon: "cloud_sync" },
-    { text: "[🔒 Cofre Criptografado AES-256]", icon: "lock" },
-    { text: "[⚡ Entrega Imediata Pix & Cripto]", icon: "currency_exchange" },
-    { text: "[🌐 Servidores Dedicados Baixa Latência]", icon: "public" },
-    { text: "[🟢 Status Indetectável 99.99%]", icon: "check_circle", highlight: true },
+    "⚡ ENTREGA APÓS CONFIRMAÇÃO DO PIX",
+    "🛡️ STATUS ACOMPANHADO POR PRODUTO",
+    "💬 SUPORTE EM PORTUGUÊS",
+    "🔐 PAINEL DO CLIENTE COM HISTÓRICO E CHAVES",
+    "📩 INSTRUÇÕES NO PAINEL E NO E-MAIL",
+  ];
+
+  const microBlocks = [
+    {
+      num: "01",
+      title: "Liberação após confirmação",
+      desc: "A liberação é processada após a confirmação do pagamento pelo Mercado Pago.",
+    },
+    {
+      num: "02",
+      title: "Pagamento via Pix",
+      desc: "Checkout Pix processado pelo Mercado Pago.",
+    },
+    {
+      num: "03",
+      title: "Status por Produto",
+      desc: "Consulte a condição informada para cada produto antes de comprar.",
+    },
+    {
+      num: "04",
+      title: "Suporte em Português",
+      desc: "Atendimento pelos canais oficiais da Overclock Store.",
+    },
+  ];
+
+  const steps = [
+    {
+      step: "1",
+      title: "Escolha seu produto",
+      desc: "Confira compatibilidade, recursos e status antes de escolher a oferta ideal.",
+    },
+    {
+      step: "2",
+      title: "Pague com Pix",
+      desc: "Realize o pagamento pelo checkout Pix seguro do Mercado Pago.",
+    },
+    {
+      step: "3",
+      title: "Acompanhe a liberação",
+      desc: "Após a confirmação, acompanhe sua chave e as instruções no Painel do Cliente e no e-mail.",
+    },
   ];
 
   const differentiators = [
     {
-      title: "Entrega Instantânea",
-      desc: "Despacho criptográfico automatizado de chaves para seu painel e e-mail imediatamente após a confirmação do pagamento.",
-      icon: "bolt"
+      title: "Entrega automática após confirmação",
+      desc: "Processamento automatizado assim que o pagamento Pix é validado pelo Mercado Pago.",
     },
     {
-      title: "Arquitetura Ring-0",
-      desc: "Desenvolvido em nível de kernel sem bibliotecas pesadas, garantindo estabilidade absoluta e zero impacto em taxa de quadros (FPS).",
-      icon: "memory"
+      title: "Pedidos e licenças organizados no painel",
+      desc: "Acesse seu histórico, visualize licenças atribuídas e acompanhe o status em um único local.",
     },
     {
-      title: "Sincronização em Nuvem",
-      desc: "Perfis e configurações sincronizados instantaneamente entre máquinas autorizadas via credenciais seguras.",
-      icon: "cloud_sync"
+      title: "Status transparente por produto",
+      desc: "Acompanhe a condição operacional informada pela equipe técnica para cada item do catálogo.",
     },
     {
-      title: "Privacidade & Anonimato",
-      desc: "Zero armazenamento de registros de hardware identificáveis. Suporte completo a checkout anônimo via Criptoativos e Pix.",
-      icon: "lock"
+      title: "Guias de configuração disponíveis",
+      desc: "Instruções claras e suporte nos canais oficiais para auxiliar nos primeiros passos de uso.",
     },
     {
-      title: "Suporte Especializado 24/7",
-      desc: "Equipe técnica e suporte oficial ativos 24 horas por dia no Discord para atendimento imediato e resolução de dúvidas.",
-      icon: "support_agent"
+      title: "Atendimento em português",
+      desc: "Suporte dedicado nos canais oficiais da Overclock Store para tirar dúvidas e prestar assistência.",
     },
     {
-      title: "Freeze Time Garantido",
-      desc: "Monitoramento contínuo de status com protocolo automático de congelamento do tempo da licença durante manutenções de jogos.",
-      icon: "ac_unit"
-    }
+      title: "Catálogo com produtos selecionados",
+      desc: "Softwares, utilitários e soluções curadas com foco em qualidade e estabilidade para PC.",
+    },
+  ];
+
+  const beforeBuyCards = [
+    {
+      title: "Compatibilidade",
+      desc: "Confira versão do Windows, requisitos e compatibilidade específica do produto.",
+    },
+    {
+      title: "Status atual",
+      desc: "Consulte a condição do produto antes de finalizar a compra.",
+    },
+    {
+      title: "Duração do plano",
+      desc: "Confira o período de acesso informado na oferta escolhida.",
+    },
+    {
+      title: "Uso consciente",
+      desc: "Softwares de terceiros podem apresentar riscos, incluindo suspensão ou banimento de contas. Não existe garantia absoluta contra punições de plataformas ou desenvolvedoras.",
+    },
   ];
 
   const faqs = [
     {
-      category: "[ENTREGA IMEDIATA]",
-      q: "Como recebo o acesso após o pagamento?",
-      a: "A liberação é 100% imediata e automatizada. Assim que o pagamento (Pix, Cartão de Crédito ou Cripto) é confirmado, a página do pedido se atualiza em tempo real com sua chave, instruções de uso e o botão de download do inicializador seguro."
+      q: "1. Como funciona a entrega após o pagamento?",
+      a: "Após a confirmação do pagamento pelo Mercado Pago, o pedido é processado e a chave é disponibilizada no Painel do Cliente e enviada ao e-mail cadastrado, conforme as condições do produto.",
     },
     {
-      category: "[COMPATIBILIDADE & PAUSA DE TEMPO]",
-      q: "O que acontece se o jogo ou software atualizar?",
-      a: "Nosso sistema possui a tecnologia exclusiva 'Freeze Time'. Ao detectarmos patches ou manutenções nos servidores oficiais do software, o status do produto entra em Manutenção no site e o tempo restante da sua licença é pausado automaticamente, sendo devolvido integralmente quando o serviço retornar."
+      q: "2. Quais formas de pagamento vocês aceitam?",
+      a: "Atualmente, aceitamos Pix pelo checkout do Mercado Pago.",
     },
     {
-      category: "[INTEGRAÇÃO DISCORD]",
-      q: "Como funciona a verificação e cargos no Discord?",
-      a: "No seu painel do cliente, basta clicar em 'Vincular Discord'. O nosso Bot reconhece seu ID e aplica automaticamente o cargo @Verificado para liberar os canais da comunidade e suporte oficial aos clientes."
+      q: "3. Como recebo e aprendo a configurar o produto?",
+      a: "As instruções e os guias disponíveis são enviados pelo Painel do Cliente e pelo e-mail. Para dúvidas adicionais, utilize os canais de suporte da Overclock Store.",
     },
     {
-      category: "[SEGURANÇA & GARANTIA]",
-      q: "Qual é a política de reembolso e troca de chaves?",
-      a: "Se o software apresentar incompatibilidade comprovada com sua máquina e nossa equipe de suporte técnico via Discord não conseguir resolver em até 24 horas, fornecemos chave substituta ou crédito integral na loja."
+      q: "4. Como sei se o produto está funcionando antes de comprar?",
+      a: "Consulte nossa página de Status dos Produtos. Ela apresenta a condição informada pela equipe para cada produto.",
     },
     {
-      category: "[ÁREA DO CLIENTE & HWID]",
-      q: "Posso utilizar a chave em outro computador se fizer upgrade?",
-      a: "Sim! Cada licença é vinculada ao HWID da sua máquina. O painel da Área do Cliente permite autoatendimento para reset de HWID a cada 7 dias de forma segura e instantânea."
-    }
+      q: "5. Funciona em qualquer versão do Windows?",
+      a: "A compatibilidade depende do produto. Confira os requisitos específicos na respectiva página antes de comprar.",
+    },
+    {
+      q: "6. Vai ter ferramenta para o meu jogo?",
+      a: "Nosso catálogo pode receber novos produtos conforme disponibilidade e seleção da equipe. Sugestões podem ser encaminhadas pelos canais oficiais da comunidade.",
+    },
+    {
+      q: "7. Vocês oferecem reembolso?",
+      a: "As solicitações de cancelamento, arrependimento, reembolso e resolução de problemas serão tratadas conforme a legislação aplicável e a Política de Reembolso da Overclock Store. Para solicitar atendimento, entre em contato pelos canais oficiais.",
+    },
   ];
 
   return (
     <div className="flex flex-col w-full">
       {/* ---------------------------------------------------- */}
-      {/* 1. HERO SECTION (OVERCLOCK STORE Spec)              */}
+      {/* MARQUEE OFICIAL                                      */}
       {/* ---------------------------------------------------- */}
-      <div className="relative w-full overflow-hidden">
-        {/* Top Ambient Glow Aura */}
-        <div className="pointer-events-none absolute left-1/2 -top-24 -translate-x-1/2 w-[720px] h-[340px] bg-primary-container/20 blur-[130px] rounded-full" />
-
-        <section className="relative z-10 max-w-7xl mx-auto px-4 lg:px-12 pt-10 pb-8 flex flex-col items-center text-center">
-          {/* Top Pill Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-high/90 shadow-sm backdrop-blur-md border border-white/5">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-              </span>
-              <span className="font-mono-badge text-mono-badge uppercase tracking-wider text-primary font-semibold">
-                ⚡ Entrega Automática Imediata
-              </span>
-            </div>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container-high/90 shadow-sm backdrop-blur-md border border-white/5">
-              <span className="material-symbols-outlined text-primary text-sm">verified_user</span>
-              <span className="font-mono-badge text-mono-badge uppercase tracking-wider text-on-surface font-semibold">
-                🛡️ Suporte Técnico 24/7
-              </span>
-            </div>
-          </div>
-
-          {/* Main Headline */}
-          <h1 className="font-display-xl text-4xl sm:text-6xl lg:text-7xl max-w-5xl tracking-tight text-on-surface mb-4 font-bold leading-[1.1]">
-            Licenças Digitais de Elite com{" "}
-            <span className="text-primary underline decoration-primary/40 decoration-wavy decoration-2">
-              Alta Performance
-            </span>{" "}
-            &amp; Segurança Máxima
-          </h1>
-
-          {/* Subtitle */}
-          <p className="font-body-lg text-base sm:text-lg text-on-surface-variant max-w-2xl mb-8 leading-relaxed">
-            Entrega instantânea de chaves, ativação automatizada e 99.99% de uptime para gamers, desenvolvedores e entusiastas de alta performance.
-          </p>
-
-          {/* Dual CTA Buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-10">
-            <a
-              href="#products"
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-lg bg-primary-container hover:bg-primary text-on-primary-container font-label-md text-label-md font-bold transition-all shadow-[0_0_28px_rgba(16,185,129,0.35)] hover:shadow-[0_0_36px_rgba(16,185,129,0.55)]"
-            >
-              <span className="material-symbols-outlined text-base">shopping_bag</span>
-              <span>Explorar Produtos</span>
-            </a>
-            <Link
-              href="/status"
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-lg bg-surface-container-high hover:bg-surface-variant text-on-surface font-label-md text-label-md font-medium transition-all shadow-sm border border-white/5"
-            >
-              <span className="material-symbols-outlined text-base text-primary">sensors</span>
-              <span>Status dos Servidores</span>
-            </Link>
-          </div>
-
-          {/* 3 Trust Badges */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full max-w-4xl py-2">
-            <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-container-low shadow-sm border border-white/5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-secondary" />
-              </span>
-              <span className="font-label-sm text-label-sm text-on-surface font-medium">
-                Atendimento Dedicado 24/7
-              </span>
-            </div>
-            <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-container-low shadow-sm border border-white/5">
-              <span className="material-symbols-outlined text-primary text-base">bolt</span>
-              <span className="font-label-sm text-label-sm text-on-surface font-medium">
-                Envio da Chave em &lt; 30 segundos
-              </span>
-            </div>
-            <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-surface-container-low shadow-sm border border-white/5">
-              <span className="material-symbols-outlined text-primary text-base">verified</span>
-              <span className="font-label-sm text-label-sm text-on-surface font-medium">
-                100% de Garantia de Funcionamento
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* Marquee Ticker Bar */}
-        <div className="w-full bg-surface-container-low/70 py-2.5 overflow-hidden my-6 backdrop-blur-md border-y border-white/5">
-          <div className="flex whitespace-nowrap animate-marquee gap-8 text-on-surface-variant font-mono-badge text-mono-badge tracking-widest uppercase">
-            {[...marqueeItems, ...marqueeItems].map((item, idx) => (
-              <span key={idx} className="inline-flex items-center gap-2">
-                <span className="material-symbols-outlined text-sm text-primary">{item.icon}</span>
-                <span className={item.highlight ? "text-primary font-bold" : "text-on-surface"}>
-                  {item.text}
-                </span>
-                <span className="text-outline/40 ml-4">•</span>
-              </span>
-            ))}
-          </div>
+      <div className="w-full bg-[#061e14] py-2.5 overflow-hidden border-y border-white/5">
+        <div className="flex whitespace-nowrap animate-marquee gap-8 text-[#10b981] font-mono text-xs tracking-widest uppercase font-semibold">
+          {[...marqueeItems, ...marqueeItems, ...marqueeItems].map((text, idx) => (
+            <span key={idx} className="inline-flex items-center gap-2">
+              <span>{text}</span>
+              <span className="text-white/20 ml-6">•</span>
+            </span>
+          ))}
         </div>
       </div>
 
       {/* ---------------------------------------------------- */}
-      {/* 2. PRODUCTS SHOWCASE (#products - SEM ABAS)          */}
+      {/* HERO OFICIAL                                         */}
       {/* ---------------------------------------------------- */}
-      <section className="max-w-7xl mx-auto px-4 lg:px-12 pt-8 pb-12 w-full" id="products">
-        {/* Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-surface-container font-mono-badge text-mono-badge text-primary uppercase tracking-widest mb-3 border border-white/5">
-              <span className="material-symbols-outlined text-xs">local_fire_department</span>
-              <span>DESTAQUES // MAIS VENDIDOS DA LOJA</span>
-            </div>
-            <h2 className="font-headline-lg text-2xl sm:text-4xl tracking-tight text-on-surface mb-2 font-bold">
-              Softwares em Destaque &amp; Mais Populares
-            </h2>
-            <p className="font-body-md text-body-md text-on-surface-variant max-w-xl">
-              Acesso instantâneo aos softwares mais procurados com ativação automática, entrega imediata e suporte 24h.
-            </p>
-          </div>
+      <section className="relative z-10 max-w-6xl mx-auto px-4 lg:px-8 pt-12 pb-12 flex flex-col items-center text-center">
+        {/* Badge Hero */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
+          <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+          <span className="font-mono text-xs uppercase tracking-wider text-[#10b981] font-bold">
+            PIX VIA MERCADO PAGO · ENTREGA APÓS CONFIRMAÇÃO
+          </span>
+        </div>
 
-          <Link
-            href="/products"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-on-primary-container font-label-md text-sm font-bold transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] shrink-0 self-start sm:self-auto"
+        {/* Título Principal */}
+        <h1 className="font-['Space_Grotesk'] text-4xl sm:text-6xl lg:text-7xl max-w-4xl tracking-tight text-white mb-6 font-extrabold leading-[1.1]">
+          Sua vantagem começa aqui.{" "}
+          <span className="text-[#10b981]">Chave liberada em segundos.</span>
+        </h1>
+
+        {/* Subtítulo */}
+        <p className="font-['Geist'] text-base sm:text-lg text-[#bbcabf] max-w-3xl mb-8 leading-relaxed">
+          Softwares, spoofers e utilitários selecionados para PC. Confira recursos, compatibilidade e status antes de comprar. Após a confirmação do Pix, acompanhe a liberação da sua chave no Painel do Cliente e no e-mail.
+        </p>
+
+        {/* Botões de Ação */}
+        <div className="flex flex-wrap items-center justify-center gap-4 mb-12">
+          <a
+            href="#products"
+            className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-[#10b981] text-[#050706] hover:bg-[#34d399] font-['Space_Grotesk'] text-sm font-bold transition-all shadow-[0_0_28px_rgba(16,185,129,0.35)]"
           >
-            <span className="material-symbols-outlined text-base">grid_view</span>
-            <span>Ver todos os produtos →</span>
+            <ShoppingBag className="w-4 h-4" />
+            <span>Explorar Produtos</span>
+          </a>
+          <Link
+            href="/status"
+            className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl bg-white/5 hover:bg-white/10 text-white font-['Space_Grotesk'] text-sm font-semibold transition-all border border-white/10"
+          >
+            <ShieldCheck className="w-4 h-4 text-[#10b981]" />
+            <span>Consultar Status</span>
           </Link>
         </div>
 
-        {/* Product 3-Column Grid */}
-        {isLoadingProducts ? (
-          <div className="py-12 flex flex-col items-center justify-center gap-3 text-on-surface-variant font-mono-data text-xs">
-            <span className="material-symbols-outlined text-2xl text-primary animate-spin">progress_activity</span>
-            <span>Carregando vitrine de softwares...</span>
-          </div>
-        ) : products.length === 0 ? (
-          <div className="p-8 rounded-xl bg-surface-container-low border border-white/5 text-center space-y-3">
-            <span className="material-symbols-outlined text-3xl text-primary">inventory_2</span>
-            <h3 className="font-headline-sm text-base font-bold text-on-surface">Novos lançamentos em breve</h3>
-            <p className="font-body-sm text-xs text-on-surface-variant max-w-md mx-auto">
-              Nossos desenvolvedores estão preparando a nova linha de softwares indetectáveis. Confira nosso catálogo completo.
-            </p>
-            <Link
-              href="/products"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-variant text-primary text-xs font-bold transition-all"
-            >
-              <span>Ver Catálogo Completo →</span>
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((prod: any, idx: number) => {
-              const minPrice = prod.minPriceCents
-                ? prod.minPriceCents / 100
-                : prod.variants?.length > 0
-                ? Math.min(...prod.variants.map((v: any) => v.priceCents)) / 100
-                : 24.9;
-              const isFeatured = prod.isFeatured;
-              const stock = prod.stockCount !== undefined ? prod.stockCount : 0;
-
-              return (
-                <div
-                  key={prod.id}
-                  className="relative flex flex-col justify-between rounded-xl bg-gradient-to-b from-[#06281A] via-surface-container-low to-surface-container-lowest p-6 shadow-xl shadow-primary-container/5 transition-all duration-300 hover:-translate-y-1 border border-white/5 group"
-                >
-                  <div className="flex flex-col">
-                    {/* Top Badges */}
-                    <div className="flex items-center justify-between gap-2 mb-4">
-                      {isFeatured ? (
-                        <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-bold bg-primary-container text-on-primary-container whitespace-nowrap shrink-0">
-                          DESTAQUE
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-semibold bg-surface-container text-primary whitespace-nowrap shrink-0">
-                          {prod.category}
-                        </span>
-                      )}
-
-                      <span className="inline-flex items-center gap-1 font-mono-badge text-[11px] text-primary whitespace-nowrap shrink-0">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-                        {stock > 0 ? `Entrega Imediata (${stock} keys)` : "Sob Demanda"}
-                      </span>
-                    </div>
-
-                  {/* Thumbnail HUD Box */}
-                  <div className="relative w-full h-[140px] rounded-lg bg-surface-container-lowest/80 overflow-hidden mb-4 flex flex-col items-center justify-center border border-white/5">
-                    <img
-                      src={prod.images?.[0] || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200&auto=format&fit=crop"}
-                      alt={prod.name}
-                      className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(16,185,129,0.18)_0%,_transparent_75%)]" />
-                    <span className="font-mono-badge text-mono-badge uppercase tracking-widest text-primary relative z-10 font-bold">
-                      {prod.category} • ATIVAÇÃO RÁPIDA
-                    </span>
-                    <span className="font-body-sm text-body-sm text-outline relative z-10 text-xs">
-                      Licença Oficial com Proteção HWID
-                    </span>
-                  </div>
-
-                  {/* Title & Category Info */}
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shadow-inner shrink-0 border border-white/5">
-                      <span className="material-symbols-outlined text-xl">
-                        {idx === 0 ? "desktop_windows" : idx === 1 ? "terminal" : "shield_locked"}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-headline-sm text-base text-on-surface leading-snug font-bold truncate">
-                        {prod.name}
-                      </h3>
-                      <p className="font-mono-badge text-[10px] text-outline uppercase truncate">
-                        {prod.currentVersion || "v1.0.0"} // CHAVE DIGITAL
-                      </p>
-                    </div>
-                  </div>
-
-                  <p className="font-body-sm text-xs text-on-surface-variant mb-4 leading-relaxed line-clamp-2">
-                    {prod.tagline || prod.shortDescription}
-                  </p>
-
-                  {/* Feature Tags */}
-                  <div className="flex items-center gap-1.5 mb-6 overflow-hidden">
-                    {(prod.features || []).slice(0, 3).map((feat: string, fIdx: number) => (
-                      <span
-                        key={fIdx}
-                        className="font-mono-badge text-[10px] px-2 py-0.5 rounded bg-surface-container text-secondary border border-white/5 whitespace-nowrap truncate max-w-[110px]"
-                        title={feat}
-                      >
-                        {feat}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Price and Standardized Action Button */}
-                <div>
-                  <div className="flex items-baseline justify-between mb-3">
-                    <span className="font-body-sm text-xs text-outline">A partir de</span>
-                    <span className="font-headline-md text-lg text-on-surface font-bold">
-                      R$ {minPrice.toFixed(2).replace(".", ",")}
-                      <span className="text-xs font-normal text-outline"> / chave</span>
-                    </span>
-                  </div>
-
-                  {/* Standardized Design System Buttons */}
-                  <Link
-                    href={`/products/${prod.slug}`}
-                    className={`w-full py-3 rounded-lg font-label-md text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                      isFeatured
-                        ? "bg-primary-container hover:bg-primary text-on-primary-container shadow-[0_0_18px_rgba(16,185,129,0.3)]"
-                        : "bg-surface-container-high hover:bg-surface-variant text-on-surface shadow-sm border border-white/5"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-base">shopping_cart</span>
-                    <span>Comprar Licença</span>
-                  </Link>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      </section>
-
-      {/* ---------------------------------------------------- */}
-      {/* 3. DIFERENCIAIS DA OVERCLOCK STORE                  */}
-      {/* ---------------------------------------------------- */}
-      <section className="max-w-7xl mx-auto px-4 lg:px-12 pt-8 pb-12 w-full">
-        <div className="flex flex-col items-center text-center mb-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-surface-container font-mono-badge text-mono-badge text-primary uppercase tracking-widest mb-3 border border-white/5">
-            <span className="material-symbols-outlined text-xs">diamond</span>
-            <span>DIFERENCIAIS EXCLUSIVOS</span>
-          </div>
-          <h2 className="font-headline-lg text-3xl sm:text-4xl tracking-tight text-on-surface mb-2 font-bold">
-            Por Que Escolher a Overclock Store
-          </h2>
-          <p className="font-body-md text-body-md text-on-surface-variant max-w-xl">
-            Projetada do zero para máxima disponibilidade, segurança total e entrega automatizada de chaves em segundos.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {differentiators.map((diff, idx) => (
+        {/* Quatro Microblocos de Confiança */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-5xl text-left">
+          {microBlocks.map((b) => (
             <div
-              key={idx}
-              className="p-6 rounded-xl bg-surface-container-low border border-white/5 hover:border-primary/30 transition-all flex flex-col justify-start group"
+              key={b.num}
+              className="p-4 rounded-xl bg-[#0b0f0d] border border-white/8 space-y-1.5"
             >
-              <div className="w-12 h-12 rounded-lg bg-surface-container-high border border-white/5 flex items-center justify-center text-primary mb-4 group-hover:scale-105 transition-transform shadow-inner">
-                <span className="material-symbols-outlined text-2xl">{diff.icon}</span>
+              <div className="text-[11px] font-mono text-[#10b981] font-bold">
+                {b.num} — {b.title}
               </div>
-              <h4 className="font-headline-sm text-headline-sm font-bold text-on-surface mb-2">
-                {diff.title}
-              </h4>
-              <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                {diff.desc}
+              <p className="text-xs text-[#86948a] leading-relaxed">
+                {b.desc}
               </p>
             </div>
           ))}
@@ -405,20 +258,334 @@ export default function HomePage() {
       </section>
 
       {/* ---------------------------------------------------- */}
-      {/* 4. PERGUNTAS FREQUENTES (FAQ)                       */}
+      {/* 01 / CATÁLOGO                                        */}
       {/* ---------------------------------------------------- */}
-      <section className="max-w-4xl mx-auto px-4 lg:px-12 pt-8 pb-16 w-full" id="faq">
-        <div className="flex flex-col items-center text-center mb-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-surface-container font-mono-badge text-mono-badge text-primary uppercase tracking-widest mb-3 border border-white/5">
-            <span className="material-symbols-outlined text-xs">help</span>
-            <span>CENTRAL DE DÚVIDAS</span>
+      <section className="max-w-7xl mx-auto px-4 lg:px-8 py-12 w-full" id="products">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+              <span>01 // CATÁLOGO</span>
+            </div>
+            <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+              Escolha o que você precisa
+            </h2>
           </div>
-          <h2 className="font-headline-lg text-3xl sm:text-4xl tracking-tight text-on-surface mb-2 font-bold">
-            Perguntas Frequentes (FAQ)
+
+          <Link
+            href="/products"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-['Space_Grotesk'] text-xs font-bold transition-colors border border-white/10 self-start sm:self-auto"
+          >
+            <span>Ver Catálogo Completo →</span>
+          </Link>
+        </div>
+
+        {isLoadingProducts ? (
+          <div className="py-16 flex flex-col items-center justify-center gap-2 text-[#86948a] font-mono text-xs">
+            <div className="w-6 h-6 border-2 border-[#10b981] border-t-transparent rounded-full animate-spin" />
+            <span>Carregando catálogo de produtos...</span>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="p-12 rounded-2xl bg-[#0b0f0d] border border-white/8 text-center space-y-3 max-w-md mx-auto">
+            <ShoppingBag className="w-10 h-10 text-[#10b981] mx-auto opacity-70" />
+            <h3 className="font-['Space_Grotesk'] text-base font-bold text-white">
+              Catálogo em Preparação
+            </h3>
+            <p className="text-xs text-[#86948a] leading-relaxed">
+              Estamos preparando a entrada dos novos produtos e licenças oficiais. Em breve o catálogo estará disponível para pedidos.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products.map((prod: any) => {
+              const minPrice = prod.minPriceCents
+                ? prod.minPriceCents / 100
+                : prod.variants?.length > 0
+                ? Math.min(...prod.variants.map((v: any) => v.priceCents)) / 100
+                : 0;
+
+              return (
+                <div
+                  key={prod.id}
+                  className="rounded-2xl bg-[#0b0f0d] p-6 border border-white/8 hover:border-[#10b981]/30 transition-all flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-mono uppercase text-[#10b981] font-bold">
+                        {prod.category}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#10b981]/15 text-[#10b981]">
+                        {prod.status}
+                      </span>
+                    </div>
+
+                    <h3 className="font-['Space_Grotesk'] text-lg font-bold text-white">
+                      {prod.name}
+                    </h3>
+
+                    <p className="text-xs text-[#86948a] line-clamp-2 leading-relaxed">
+                      {prod.shortDescription}
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-[#86948a] block font-mono">A partir de</span>
+                      <span className="font-['Space_Grotesk'] text-base font-bold text-white">
+                        R$ {minPrice.toFixed(2).replace(".", ",")}
+                      </span>
+                    </div>
+
+                    <Link
+                      href={`/products/${prod.slug}`}
+                      className="px-4 py-2 rounded-xl bg-[#10b981] text-[#050706] hover:bg-[#34d399] font-['Space_Grotesk'] text-xs font-bold transition-colors"
+                    >
+                      Ver Detalhes
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* 02 / TRANSPARÊNCIA                                   */}
+      {/* ---------------------------------------------------- */}
+      <section className="max-w-7xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+              <span>02 // TRANSPARÊNCIA</span>
+            </div>
+            <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+              Status dos Produtos
+            </h2>
+            <p className="text-xs text-[#86948a] mt-1">
+              O que está online, em atualização, em manutenção ou em breve. Sem letra miúda.
+            </p>
+          </div>
+
+          <Link
+            href="/status"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-['Space_Grotesk'] text-xs font-bold transition-colors border border-white/10 self-start sm:self-auto"
+          >
+            <span>Página de Status Completa →</span>
+          </Link>
+        </div>
+
+        {products.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-[#0b0f0d] border border-white/8 text-center text-xs font-mono text-[#86948a] max-w-md mx-auto">
+            Nenhum produto cadastrado no momento. O status individual será exibido conforme a entrada de itens no catálogo.
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-[#0b0f0d] border border-white/8 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono min-w-[600px]">
+                <thead className="bg-[#101412] text-[#86948a] uppercase border-b border-white/8">
+                  <tr>
+                    <th className="p-4">PRODUTO</th>
+                    <th className="p-4">CATEGORIA</th>
+                    <th className="p-4">ESTADO ATUAL</th>
+                    <th className="p-4">VERSÃO</th>
+                    <th className="p-4">ÚLTIMA REVISÃO</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-white">
+                  {products.map((p) => (
+                    <tr key={p.id} className="hover:bg-white/[0.02]">
+                      <td className="p-4 font-bold font-sans">{p.name}</td>
+                      <td className="p-4 text-[#86948a]">{p.category}</td>
+                      <td className="p-4">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#10b981]/15 text-[#10b981]">
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-[#86948a]">{p.currentVersion || "1.0.0"}</td>
+                      <td className="p-4 text-[#86948a]">
+                        {p.updatedAt ? new Date(p.updatedAt).toLocaleDateString("pt-BR") : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* 03 / COMO FUNCIONA                                   */}
+      {/* ---------------------------------------------------- */}
+      <section className="max-w-6xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+            <span>03 // COMO FUNCIONA</span>
+          </div>
+          <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+            Do Pix à ativação em segundos
           </h2>
-          <p className="font-body-md text-body-md text-on-surface-variant max-w-lg">
-            Respostas diretas sobre liberação de chaves, formas de pagamento e suporte ao cliente.
-          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {steps.map((s) => (
+            <div
+              key={s.step}
+              className="p-6 rounded-2xl bg-[#0b0f0d] border border-white/8 space-y-3 relative overflow-hidden"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[#10b981]/10 text-[#10b981] font-mono font-bold text-base flex items-center justify-center">
+                {s.step}
+              </div>
+              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white">
+                {s.title}
+              </h3>
+              <p className="text-xs text-[#86948a] leading-relaxed">
+                {s.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* 04 / DIFERENCIAIS                                    */}
+      {/* ---------------------------------------------------- */}
+      <section className="max-w-6xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+            <span>04 // DIFERENCIAIS</span>
+          </div>
+          <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+            Por que escolher a Overclock Store
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {differentiators.map((d, i) => (
+            <div
+              key={i}
+              className="p-6 rounded-2xl bg-[#0b0f0d] border border-white/8 space-y-2 hover:border-white/15 transition-colors"
+            >
+              <div className="w-2 h-2 rounded-full bg-[#10b981] mb-2" />
+              <h4 className="font-['Space_Grotesk'] text-sm font-bold text-white">
+                {d.title}
+              </h4>
+              <p className="text-xs text-[#86948a] leading-relaxed">
+                {d.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* 05 / ANTES DE COMPRAR                                */}
+      {/* ---------------------------------------------------- */}
+      <section className="max-w-6xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+            <span>05 // ANTES DE COMPRAR</span>
+          </div>
+          <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+            O que conferir antes de fechar o pedido
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {beforeBuyCards.map((c, i) => (
+            <div
+              key={i}
+              className="p-5 rounded-2xl bg-[#0b0f0d] border border-white/8 space-y-2 flex flex-col justify-between"
+            >
+              <div>
+                <h4 className="font-['Space_Grotesk'] text-sm font-bold text-white mb-2">
+                  {c.title}
+                </h4>
+                <p className="text-xs text-[#86948a] leading-relaxed">
+                  {c.desc}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* AVALIAÇÕES APROVADAS (Se houver)                    */}
+      {/* ---------------------------------------------------- */}
+      {approvedReviews.length > 0 && (
+        <section className="max-w-6xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+                <span>AVALIAÇÕES // CLIENTES VERIFICADOS</span>
+              </div>
+              <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+                O que dizem os clientes
+              </h2>
+            </div>
+
+            <Link
+              href="/reviews"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-['Space_Grotesk'] text-xs font-bold transition-colors border border-white/10 self-start sm:self-auto"
+            >
+              <span>Ver Todas as Avaliações →</span>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {approvedReviews.slice(0, 3).map((rev) => (
+              <div
+                key={rev.id}
+                className="p-6 rounded-2xl bg-[#0b0f0d] border border-white/8 space-y-3 flex flex-col justify-between"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-['Space_Grotesk'] font-bold text-white text-xs">
+                      {rev.authorName}
+                    </span>
+                    <span className="text-[10px] font-mono text-[#10b981]">
+                      Compra Verificada
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-amber-400">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-3 h-3 ${
+                          i < rev.rating ? "fill-current" : "text-white/20"
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-[#e0e3df] italic leading-relaxed">
+                    "{rev.comment}"
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-white/5 text-[10px] font-mono text-[#86948a] flex items-center justify-between">
+                  <span>{rev.productName}</span>
+                  <span>{rev.createdAt}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 06 / DÚVIDAS (FAQ)                                   */}
+      {/* ---------------------------------------------------- */}
+      <section className="max-w-4xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5" id="faq">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest mb-2 border border-white/5 font-bold">
+            <span>06 // DÚVIDAS</span>
+          </div>
+          <h2 className="font-['Space_Grotesk'] text-2xl sm:text-4xl tracking-tight text-white font-bold">
+            Perguntas Frequentes
+          </h2>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -427,32 +594,25 @@ export default function HomePage() {
             return (
               <div
                 key={idx}
-                className="rounded-xl bg-surface-container-low transition-all border border-white/5 overflow-hidden"
+                className="rounded-xl bg-[#0b0f0d] border border-white/8 transition-all overflow-hidden"
               >
                 <button
                   type="button"
                   onClick={() => setOpenFaq(isOpen ? null : idx)}
-                  className="w-full p-4 text-left flex items-start justify-between gap-4 cursor-pointer hover:bg-surface-container-high/40 transition-colors"
+                  className="w-full p-4 text-left flex items-start justify-between gap-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
                 >
-                  <div className="flex flex-col gap-1.5">
-                    <span className="font-mono-badge text-mono-badge px-2 py-0.5 rounded bg-surface-container text-primary font-bold uppercase w-fit">
-                      {faq.category}
-                    </span>
-                    <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                      {faq.q}
-                    </span>
-                  </div>
-                  <span
-                    className={`material-symbols-outlined text-primary text-xl transition-transform duration-200 mt-1 ${
+                  <span className="font-['Space_Grotesk'] text-sm text-white font-semibold">
+                    {faq.q}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-[#10b981] shrink-0 transition-transform duration-200 mt-0.5 ${
                       isOpen ? "rotate-180" : ""
                     }`}
-                  >
-                    expand_more
-                  </span>
+                  />
                 </button>
                 {isOpen && (
                   <div className="px-4 pb-4">
-                    <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed pt-1">
+                    <p className="text-xs text-[#86948a] leading-relaxed pt-1 font-['Geist']">
                       {faq.a}
                     </p>
                   </div>
@@ -460,6 +620,56 @@ export default function HomePage() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* 07 / COMUNIDADE                                      */}
+      {/* ---------------------------------------------------- */}
+      <section className="max-w-5xl mx-auto px-4 lg:px-8 py-12 w-full border-t border-white/5">
+        <div className="p-8 sm:p-12 rounded-2xl bg-gradient-to-b from-[#0b0f0d] to-[#061e14] border border-white/10 text-center space-y-6">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-white/5 font-mono text-xs text-[#10b981] uppercase tracking-widest border border-white/5 font-bold">
+            <span>07 // COMUNIDADE</span>
+          </div>
+
+          <h2 className="font-['Space_Grotesk'] text-3xl sm:text-4xl tracking-tight text-white font-extrabold">
+            É no Discord que tudo acontece primeiro
+          </h2>
+
+          <p className="text-sm text-[#bbcabf] max-w-xl mx-auto leading-relaxed">
+            Acompanhe novidades, atualizações, guias e converse com nossa equipe.
+          </p>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 max-w-3xl mx-auto text-xs font-mono text-white/90 pt-2">
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+              Suporte por ticket
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+              Avisos de atualizações
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+              Guias de configuração
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+              Sugestões de produtos
+            </div>
+            <div className="p-3 rounded-xl bg-white/5 border border-white/5 col-span-2 sm:col-span-1">
+              Comunicação direta
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <a
+              href="https://discord.gg/w7R5wX3r99"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-[#10b981] text-[#050706] hover:bg-[#34d399] font-['Space_Grotesk'] text-sm font-bold transition-all shadow-[0_0_24px_rgba(16,185,129,0.35)]"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Entrar no Discord Oficial</span>
+              <ExternalLink className="w-3.5 h-3.5 ml-1" />
+            </a>
+          </div>
         </div>
       </section>
     </div>

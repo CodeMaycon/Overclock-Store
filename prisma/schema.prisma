@@ -1,6 +1,7 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
@@ -356,6 +357,7 @@ model Order {
   items          OrderItem[]
   payments       Payment[]
   licenseKeys    LicenseKey[]
+  reviews        Review[]
 
   @@index([userId])
   @@index([orderNumber])
@@ -502,18 +504,24 @@ model Review {
   id                 String    @id @default(uuid())
   productId          String
   userId             String
+  orderId            String?
   rating             Int       // 1 a 5 estrelas
   comment            String    @db.Text
   isVerifiedPurchase Boolean   @default(true)
   isApproved         Boolean   @default(false) // Moderação do admin
   discordMessageId   String?   // Se espelhado no Discord
   createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
 
+  order              Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
   product            Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, productId, orderId])
   @@index([productId])
   @@index([userId])
+  @@index([orderId])
+  @@index([isApproved])
 }
 
 // ----------------------------------------------------
