@@ -616,31 +616,55 @@ export default function AdminBackofficePage() {
       alert("Informe o código do cupom.");
       return;
     }
+
     setSavingCoupon(true);
     try {
-      const payload: any = {
+      const isPercent = couponFormType === "PERCENT";
+      let discountVal = 0;
+
+      if (isPercent) {
+        const clean = couponFormValue.replace(",", ".");
+        discountVal = Math.round(parseFloat(clean) || 0);
+      } else {
+        discountVal = parsePriceToCents(couponFormValue);
+      }
+
+      if (!discountVal || discountVal <= 0) {
+        alert("Informe um valor de desconto válido e maior que zero.");
+        setSavingCoupon(false);
+        return;
+      }
+
+      const parsedMaxUses = couponFormMaxUses && parseInt(couponFormMaxUses, 10) > 0 ? parseInt(couponFormMaxUses, 10) : null;
+      const parsedMinAmount = couponFormMinAmount && couponFormMinAmount.trim() !== "" ? parsePriceToCents(couponFormMinAmount) : 0;
+
+      const payload = {
         code: couponFormCode.trim().toUpperCase(),
-        maxUses: couponFormMaxUses ? parseInt(couponFormMaxUses, 10) : undefined,
-        minOrderAmountCents: couponFormMinAmount ? parsePriceToCents(couponFormMinAmount) : undefined,
+        discountType: isPercent ? "PERCENTAGE" : "FIXED",
+        discountValue: discountVal,
+        maxUses: parsedMaxUses,
+        minOrderCents: parsedMinAmount,
+        minOrderValueCents: parsedMinAmount,
+        minOrderAmountCents: parsedMinAmount,
+        isActive: true,
         active: true,
       };
-
-      if (couponFormType === "PERCENT") {
-        payload.discountPercent = parseFloat(couponFormValue.replace(",", "."));
-      } else {
-        payload.discountAmountCents = parsePriceToCents(couponFormValue);
-      }
 
       const res = await fetch("/api/admin/coupons", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao criar cupom.");
-      showAdminToast(data.message);
+
+      showAdminToast(data.message || `Cupom ${payload.code} criado com sucesso!`);
       setCouponModalOpen(false);
       setCouponFormCode("");
+      setCouponFormValue("15");
+      setCouponFormMaxUses("");
+      setCouponFormMinAmount("");
       loadCoupons();
     } catch (err: any) {
       alert(`Erro: ${err.message}`);
@@ -654,11 +678,11 @@ export default function AdminBackofficePage() {
       const res = await fetch("/api/admin/coupons", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, active: !currentActive }),
+        body: JSON.stringify({ id, isActive: !currentActive, active: !currentActive }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao atualizar cupom.");
-      showAdminToast(data.message);
+      showAdminToast(data.message || "Status do cupom atualizado.");
       loadCoupons();
     } catch (err: any) {
       alert(`Erro: ${err.message}`);
@@ -2220,54 +2244,59 @@ export default function AdminBackofficePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-white">
-                      {couponsList.map((cup) => (
-                        <tr key={cup.id} className="hover:bg-white/[0.02]">
-                          <td className="p-3.5 font-bold text-[#10b981] text-sm">
-                            {cup.code}
-                          </td>
-                          <td className="p-3.5">
-                            {cup.discountPercent ? (
-                              <span className="font-bold text-white">{cup.discountPercent}% OFF</span>
-                            ) : cup.discountAmountCents ? (
-                              <span className="font-bold text-white">R$ {centsToBr(cup.discountAmountCents)} OFF</span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td className="p-3.5 text-[#bbcabf]">
-                            {cup.usedCount} / {cup.maxUses ? `${cup.maxUses} máx.` : "Ilimitado"}
-                          </td>
-                          <td className="p-3.5 text-[#86948a]">
-                            {cup.minOrderAmountCents ? `R$ ${centsToBr(cup.minOrderAmountCents)}` : "Sem mínimo"}
-                          </td>
-                          <td className="p-3.5">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              cup.active
-                                ? "bg-[#10b981]/15 text-[#10b981]"
-                                : "bg-white/5 text-[#86948a]"
-                            }`}>
-                              {cup.active ? "ATIVO" : "INATIVO"}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleToggleCoupon(cup.id, cup.active)}
-                                className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer"
-                              >
-                                {cup.active ? "Desativar" : "Ativar"}
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCoupon(cup.id)}
-                                className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                title="Excluir cupom"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {couponsList.map((cup) => {
+                        const isPercent = (cup as any).discountType === "PERCENTAGE" || (cup.discountPercent !== null && cup.discountPercent !== undefined);
+                        const discountVal = (cup as any).discountValue ?? cup.discountPercent ?? cup.discountAmountCents ?? 0;
+                        const minOrder = (cup as any).minOrderCents ?? cup.minOrderAmountCents ?? 0;
+                        const isCupActive = (cup as any).isActive !== undefined ? (cup as any).isActive : cup.active;
+
+                        return (
+                          <tr key={cup.id} className="hover:bg-white/[0.02]">
+                            <td className="p-3.5 font-bold text-[#10b981] text-sm">
+                              {cup.code}
+                            </td>
+                            <td className="p-3.5">
+                              {isPercent ? (
+                                <span className="font-bold text-white">{discountVal}% OFF</span>
+                              ) : (
+                                <span className="font-bold text-white">R$ {centsToBr(discountVal)} OFF</span>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-[#bbcabf]">
+                              {cup.usedCount} / {cup.maxUses ? `${cup.maxUses} máx.` : "Ilimitado"}
+                            </td>
+                            <td className="p-3.5 text-[#86948a]">
+                              {minOrder > 0 ? `R$ ${centsToBr(minOrder)}` : "Sem mínimo"}
+                            </td>
+                            <td className="p-3.5">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                isCupActive
+                                  ? "bg-[#10b981]/15 text-[#10b981]"
+                                  : "bg-white/5 text-[#86948a]"
+                              }`}>
+                                {isCupActive ? "ATIVO" : "INATIVO"}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleToggleCoupon(cup.id, isCupActive)}
+                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer"
+                                >
+                                  {isCupActive ? "Desativar" : "Ativar"}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCoupon(cup.id)}
+                                  className="p-1 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="Excluir cupom"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
