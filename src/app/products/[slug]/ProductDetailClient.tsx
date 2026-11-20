@@ -17,7 +17,6 @@ import {
   Play,
   AlertCircle
 } from "lucide-react";
-import { MOCK_CHANGELOGS } from "@/lib/mock-data";
 
 export interface FormattedVariant {
   id: string;
@@ -89,7 +88,7 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
   const isMaintenance = product.status === "MAINTENANCE";
   const productChangelogs = (product.changelogs && product.changelogs.length > 0) 
     ? product.changelogs 
-    : MOCK_CHANGELOGS.filter((c) => c.productSlug === product.slug);
+    : [];
 
   const rawPrice = (selectedVariant.priceCents || 2490) / 100;
   const rawPriceCents = selectedVariant.priceCents || 2490;

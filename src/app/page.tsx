@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { MOCK_PRODUCTS } from "@/lib/mock-data";
 
 export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);

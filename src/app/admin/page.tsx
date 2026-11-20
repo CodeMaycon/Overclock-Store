@@ -426,6 +426,40 @@ export default function AdminBackofficePage() {
     }
   };
 
+  // Gerenciar licença atribuída a cliente (Devolver ao Estoque ou Revogar)
+  const handleManageLicense = async (
+    keyId: string,
+    action: "RETURN_TO_STOCK" | "REVOKE",
+    keyDisplay: string
+  ) => {
+    const isReturn = action === "RETURN_TO_STOCK";
+    const promptMsg = isReturn
+      ? `Deseja desvincular a chave "${keyDisplay}" e devolvê-la ao estoque disponível para venda? Digite o motivo (opcional):`
+      : `Deseja revogar permanentemente a chave "${keyDisplay}"? Digite o motivo:`;
+
+    const reason = window.prompt(promptMsg, isReturn ? "Devolução manual ao estoque" : "Revogação administrativa");
+    if (reason === null) return;
+
+    try {
+      const res = await fetch(`/api/admin/licenses/${keyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao processar alteração na chave.");
+
+      showAdminToast(data.message || "Chave atualizada com sucesso!");
+      if (selectedCustomerDetails?.id) {
+        loadCustomerDetails(selectedCustomerDetails.id);
+      }
+      loadKeys();
+      loadAdminData();
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    }
+  };
+
   // Abrir modal de atribuição gratuita
   const handleOpenGrantFree = (userId?: string) => {
     if (userId) {
@@ -2036,13 +2070,35 @@ export default function AdminBackofficePage() {
                                 </td>
 
                                 <td className="p-3.5 text-right">
-                                  <button
-                                    onClick={() => handleDeleteKey(k.id)}
-                                    className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold text-[10px] transition-colors cursor-pointer"
-                                    title="Remover chave do estoque"
-                                  >
-                                    Remover
-                                  </button>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {k.user && (
+                                      <>
+                                        <button
+                                          onClick={() => handleManageLicense(k.id, "RETURN_TO_STOCK", k.key)}
+                                          className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                          title="Desvincular do cliente e devolver ao estoque"
+                                        >
+                                          Devolver ao Estoque
+                                        </button>
+                                        {k.status !== "REVOKED" && (
+                                          <button
+                                            onClick={() => handleManageLicense(k.id, "REVOKE", k.key)}
+                                            className="px-2 py-1 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                            title="Revogar chave do cliente"
+                                          >
+                                            Revogar
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteKey(k.id)}
+                                      className="px-2 py-1 rounded bg-white/5 hover:bg-rose-500/20 text-[#86948a] hover:text-rose-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                      title="Remover chave do estoque"
+                                    >
+                                      Remover
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -3896,6 +3952,7 @@ export default function AdminBackofficePage() {
                             <th className="p-2.5">SOFTWARE / PLANO</th>
                             <th className="p-2.5">STATUS</th>
                             <th className="p-2.5">VALIDADE</th>
+                            <th className="p-2.5 text-right">AÇÕES</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5 text-white">
@@ -3908,12 +3965,38 @@ export default function AdminBackofficePage() {
                                 {lic.product?.name} ({lic.variant?.name})
                               </td>
                               <td className="p-2.5">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#10b981]/15 text-[#10b981]">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  lic.status === "ACTIVE"
+                                    ? "bg-cyan-500/15 text-cyan-300"
+                                    : lic.status === "REVOKED"
+                                    ? "bg-rose-500/15 text-rose-300"
+                                    : "bg-[#10b981]/15 text-[#10b981]"
+                                }`}>
                                   {lic.status}
                                 </span>
                               </td>
                               <td className="p-2.5 text-[#86948a]">
                                 {lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "Não ativada"}
+                              </td>
+                              <td className="p-2.5 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleManageLicense(lic.id, "RETURN_TO_STOCK", lic.key)}
+                                    className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                    title="Desvincular e Devolver ao Estoque"
+                                  >
+                                    Devolver ao Estoque
+                                  </button>
+                                  {lic.status !== "REVOKED" && (
+                                    <button
+                                      onClick={() => handleManageLicense(lic.id, "REVOKE", lic.key)}
+                                      className="px-2 py-1 rounded bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                      title="Revogar Licença"
+                                    >
+                                      Revogar
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}

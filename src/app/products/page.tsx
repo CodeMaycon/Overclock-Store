@@ -5,7 +5,8 @@ import Link from "next/link";
 import { MOCK_PRODUCTS, Product } from "@/lib/mock-data";
 
 export default function CatalogPage() {
-  const [productsList, setProductsList] = useState<Product[]>(MOCK_PRODUCTS);
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [sortBy, setSortBy] = useState("bestsellers");
@@ -16,11 +17,16 @@ export default function CatalogPage() {
       try {
         const res = await fetch("/api/products");
         const data = await res.json();
-        if (data.success && data.products && data.products.length > 0) {
+        if (data.success && Array.isArray(data.products)) {
           setProductsList(data.products);
+        } else {
+          setProductsList([]);
         }
       } catch (err) {
         console.error("Erro ao carregar catálogo do banco:", err);
+        setProductsList([]);
+      } finally {
+        setIsLoading(false);
       }
     }
     loadCatalog();
@@ -193,7 +199,7 @@ export default function CatalogPage() {
                   : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
               }`}
             >
-              Todos os Softwares ({MOCK_PRODUCTS.length})
+              Todos os Softwares ({productsList.length})
             </button>
             <button
               onClick={() => setSelectedCategory("os")}
@@ -203,7 +209,7 @@ export default function CatalogPage() {
                   : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
               }`}
             >
-              Sistemas &amp; Kernel (1)
+              Sistemas &amp; Kernel
             </button>
             <button
               onClick={() => setSelectedCategory("dev")}
@@ -213,7 +219,7 @@ export default function CatalogPage() {
                   : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
               }`}
             >
-              Ferramentas de Dev (1)
+              Ferramentas de Dev
             </button>
             <button
               onClick={() => setSelectedCategory("security")}
@@ -223,7 +229,7 @@ export default function CatalogPage() {
                   : "bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
               }`}
             >
-              Segurança &amp; DMA (1)
+              Segurança &amp; DMA
             </button>
           </div>
         </div>
@@ -233,16 +239,30 @@ export default function CatalogPage() {
       {/* PRODUCTS DISPLAY GRID / LIST                         */}
       {/* ---------------------------------------------------- */}
       <section className="max-w-7xl mx-auto px-4 lg:px-12">
-        <div
-          className={`grid gap-6 ${
-            layoutMode === "grid-3"
-              ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-              : layoutMode === "grid-4"
-              ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
-              : "grid-cols-1"
-          }`}
-        >
-          {filteredProducts.map((prod, idx) => {
+        {isLoading ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-3 text-on-surface-variant font-mono-data text-xs">
+            <span className="material-symbols-outlined text-3xl text-primary animate-spin">progress_activity</span>
+            <span>Carregando softwares do catálogo...</span>
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="py-16 px-6 rounded-2xl bg-surface-container-low border border-white/5 text-center space-y-4 max-w-xl mx-auto">
+            <span className="material-symbols-outlined text-4xl text-primary">inventory_2</span>
+            <h3 className="font-headline-sm text-lg font-bold text-white">Nenhum software disponível no momento</h3>
+            <p className="font-body-sm text-xs text-on-surface-variant leading-relaxed">
+              Nosso catálogo está sendo preparado para o lançamento oficial dos novos softwares após o fechamento das parcerias. Fique atento aos anúncios no Discord ou contate nosso suporte.
+            </p>
+          </div>
+        ) : (
+          <div
+            className={`grid gap-6 ${
+              layoutMode === "grid-3"
+                ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+                : layoutMode === "grid-4"
+                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+                : "grid-cols-1"
+            }`}
+          >
+            {filteredProducts.map((prod, idx) => {
             const minPrice = (prod.variants && prod.variants.length > 0)
               ? Math.min(...prod.variants.map((v: any) => v.priceCents)) / 100
               : 24.9;
@@ -401,27 +421,30 @@ export default function CatalogPage() {
             );
           })}
         </div>
+        )}
       </section>
 
       {/* ---------------------------------------------------- */}
       {/* PAGINATION                                           */}
       {/* ---------------------------------------------------- */}
-      <div className="max-w-7xl mx-auto px-4 lg:px-12 pt-12 flex items-center justify-between border-t border-white/5 mt-12 text-xs font-mono-badge">
-        <span className="text-outline">
-          Exibindo 1 - {filteredProducts.length} de {filteredProducts.length} produtos disponíveis
-        </span>
-        <div className="flex items-center gap-1">
-          <button className="px-3 py-1.5 rounded bg-surface-container text-outline hover:text-on-surface transition-colors disabled:opacity-50" disabled>
-            Anterior
-          </button>
-          <button className="px-3 py-1.5 rounded bg-primary-container text-on-primary-container font-bold">
-            1
-          </button>
-          <button className="px-3 py-1.5 rounded bg-surface-container text-outline hover:text-on-surface transition-colors disabled:opacity-50" disabled>
-            Próxima
-          </button>
+      {filteredProducts.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 lg:px-12 pt-12 flex items-center justify-between border-t border-white/5 mt-12 text-xs font-mono-badge">
+          <span className="text-outline">
+            Exibindo 1 - {filteredProducts.length} de {filteredProducts.length} produtos disponíveis
+          </span>
+          <div className="flex items-center gap-1">
+            <button className="px-3 py-1.5 rounded bg-surface-container text-outline hover:text-on-surface transition-colors disabled:opacity-50" disabled>
+              Anterior
+            </button>
+            <button className="px-3 py-1.5 rounded bg-primary-container text-on-primary-container font-bold">
+              1
+            </button>
+            <button className="px-3 py-1.5 rounded bg-surface-container text-outline hover:text-on-surface transition-colors disabled:opacity-50" disabled>
+              Próxima
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

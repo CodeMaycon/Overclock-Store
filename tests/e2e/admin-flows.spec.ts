@@ -400,4 +400,124 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
     await expect(page.locator("body")).toContainText("PRODUCT_UPDATED");
     await expect(page.locator("body")).toContainText("@admin_overclock");
   });
+
+  test("10. Revogação e Devolução ao Estoque de Chave Atribuída a Cliente", async ({ page }) => {
+    // Intercepta confirmações de prompt para retorno ao estoque / revogação
+    page.on("dialog", async (dialog) => {
+      await dialog.accept("Devolução ao estoque solicitada pelo cliente.");
+    });
+
+    await page.route("**/api/admin/overview", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          kpis: {
+            totalRevenueCents: 0,
+            totalRevenueFormatted: "R$ 0,00",
+            completedOrders: 0,
+            completedOrdersCount: 0,
+            pendingOrders: 0,
+            totalUsers: 1,
+            totalResellers: 0,
+          },
+          lowStockAlerts: [],
+          recentOrders: [],
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/users", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          users: [
+            {
+              id: "usr-cliente-rev",
+              username: "cliente_premium",
+              fullName: "Cliente Premium",
+              email: "premium@cliente.com",
+              role: "CUSTOMER",
+              isBanned: false,
+              orderCount: 1,
+              licenseCount: 1,
+            },
+          ],
+        }),
+      });
+    });
+
+    let licenseRevokedOrUnlinked = false;
+
+    await page.route("**/api/admin/users/usr-cliente-rev", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          user: {
+            id: "usr-cliente-rev",
+            username: "cliente_premium",
+            fullName: "Cliente Premium",
+            email: "premium@cliente.com",
+            role: "CUSTOMER",
+            isBanned: false,
+            createdAt: "2026-01-10T00:00:00.000Z",
+            orders: [],
+            licenses: licenseRevokedOrUnlinked
+              ? []
+              : [
+                  {
+                    id: "lic-assigned-101",
+                    key: "OVLK-PREM-9999",
+                    status: "ACTIVE",
+                    product: { name: "Software Pro" },
+                    variant: { name: "Mensal" },
+                  },
+                ],
+          },
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/licenses/lic-assigned-101", async (route) => {
+      const json = await route.request().postDataJSON();
+      expect(json.action).toBe("RETURN_TO_STOCK");
+      licenseRevokedOrUnlinked = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          message: "Chave desvinculada com sucesso e retornada ao estoque disponível!",
+        }),
+      });
+    });
+
+    await page.goto("/admin");
+    const usersTab = page.locator("button:has-text('Clientes & Blacklist')").first();
+    await usersTab.click();
+
+    await expect(page.locator("body")).toContainText("@cliente_premium");
+
+    // Abre detalhes da ficha do cliente
+    await page.locator("button:has-text('Detalhes')").first().click();
+    await expect(page.locator("body")).toContainText("Licenças Digitais do Cliente");
+    await expect(page.locator("body")).toContainText("OVLK-PREM-9999");
+
+    // Verifica presença dos botões de gestão da chave
+    const returnStockBtn = page.locator("button:has-text('Devolver ao Estoque')").first();
+    const revokeBtn = page.locator("button:has-text('Revogar')").first();
+    await expect(returnStockBtn).toBeVisible();
+    await expect(revokeBtn).toBeVisible();
+
+    // Executa ação de desvincular e devolver ao estoque
+    await returnStockBtn.click();
+
+    // Valida que a licença foi desvinculada e o modal atualizou
+    await expect(page.locator("body")).toContainText("Nenhuma licença atribuída a este usuário.");
+  });
 });

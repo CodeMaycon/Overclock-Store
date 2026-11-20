@@ -23,48 +23,60 @@ export default function ChangelogsPage() {
       </div>
 
       {/* Linha do Tempo de Changelogs */}
-      <div className="space-y-6">
-        {MOCK_CHANGELOGS.map((chg) => (
-          <div
-            key={chg.id}
-            className="glass-card rounded-2xl p-6 border border-white/8 space-y-4"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/8">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {chg.version}
-                </span>
-                <span className="text-sm font-bold text-white">
-                  {chg.productName}
-                </span>
-              </div>
-              <span className="text-xs font-mono text-gray-500">{chg.date}</span>
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold text-white mb-2">{chg.title}</h3>
-              <ul className="space-y-2">
-                {chg.changes.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2.5 text-xs text-gray-300">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <Link
-                href={`/products/${chg.productSlug}`}
-                className="text-xs text-emerald-400 hover:underline flex items-center gap-1"
-              >
-                <span>Ver Produto</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+      {MOCK_CHANGELOGS.length === 0 ? (
+        <div className="glass-card rounded-2xl p-12 border border-white/8 text-center space-y-4 max-w-lg mx-auto">
+          <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center">
+            <GitCommit className="w-6 h-6 text-emerald-400" />
           </div>
-        ))}
-      </div>
+          <h3 className="text-base font-bold text-white">Nenhum changelog publicado ainda</h3>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            As notas de versão, patches de segurança e melhorias de performance dos novos softwares serão publicadas aqui continuamente.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {MOCK_CHANGELOGS.map((chg) => (
+            <div
+              key={chg.id}
+              className="glass-card rounded-2xl p-6 border border-white/8 space-y-4"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-white/8">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    {chg.version}
+                  </span>
+                  <span className="text-sm font-bold text-white">
+                    {chg.productName}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-gray-500">{chg.date}</span>
+              </div>
+
+              <div>
+                <h3 className="text-base font-bold text-white mb-2">{chg.title}</h3>
+                <ul className="space-y-2">
+                  {chg.changes.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2.5 text-xs text-gray-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <Link
+                  href={`/products/${chg.productSlug}`}
+                  className="text-xs text-emerald-400 hover:underline flex items-center gap-1"
+                >
+                  <span>Ver Produto</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
     </div>
   );

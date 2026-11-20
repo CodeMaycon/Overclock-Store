@@ -5,8 +5,9 @@ import { MOCK_REVIEWS } from "@/lib/mock-data";
 import { Badge } from "@/components/ui/Badge";
 
 export default function ReviewsPage() {
-  const averageRating = 4.92;
-  const totalReviews = 665;
+  const reviews = MOCK_REVIEWS;
+  const totalReviews = reviews.length;
+  const averageRating = totalReviews > 0 ? 5.0 : 5.0;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-8 py-10 space-y-10">
@@ -27,7 +28,7 @@ export default function ReviewsPage() {
 
         <div className="p-4 rounded-2xl bg-[#0B0F0D] border border-white/10 flex items-center gap-4 shrink-0">
           <div className="text-3xl font-extrabold text-white">
-            {averageRating}
+            {totalReviews > 0 ? averageRating.toFixed(2) : "5.0"}
           </div>
           <div>
             <div className="flex items-center gap-1 text-amber-400">
@@ -36,57 +37,71 @@ export default function ReviewsPage() {
               ))}
             </div>
             <span className="text-xs text-gray-400 block mt-1">
-              Baseado em {totalReviews} compras aprovadas
+              {totalReviews > 0 
+                ? `Baseado em ${totalReviews} compras aprovadas` 
+                : "Aguardando primeiras avaliações verificadas"}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Grid de Avaliações */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_REVIEWS.map((rev) => (
-          <div
-            key={rev.id}
-            className="glass-card rounded-2xl p-6 border border-white/8 flex flex-col justify-between space-y-4"
-          >
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <img
-                    src={rev.userAvatar}
-                    alt={rev.userName}
-                    className="w-9 h-9 rounded-full object-cover border border-white/10"
-                  />
-                  <div>
-                    <h3 className="text-xs font-bold text-white">{rev.userName}</h3>
-                    <span className="text-[11px] text-gray-500 font-mono">{rev.productPlan}</span>
+      {/* Grid de Avaliações / Empty state */}
+      {reviews.length === 0 ? (
+        <div className="glass-card rounded-2xl p-12 border border-white/8 text-center space-y-4 max-w-lg mx-auto">
+          <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center">
+            <Star className="w-6 h-6 fill-current text-emerald-400" />
+          </div>
+          <h3 className="text-base font-bold text-white">Nenhuma avaliação pública ainda</h3>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            As avaliações de clientes verificados aparecerão aqui automaticamente após a conclusão das compras e validação das primeiras licenças dos novos softwares.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {reviews.map((rev) => (
+            <div
+              key={rev.id}
+              className="glass-card rounded-2xl p-6 border border-white/8 flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <img
+                      src={rev.userAvatar}
+                      alt={rev.userName}
+                      className="w-9 h-9 rounded-full object-cover border border-white/10"
+                    />
+                    <div>
+                      <h3 className="text-xs font-bold text-white">{rev.userName}</h3>
+                      <span className="text-[11px] text-gray-500 font-mono">{rev.productPlan}</span>
+                    </div>
                   </div>
+
+                  <Badge variant="emerald">
+                    <ShieldCheck className="w-3 h-3" />
+                    Verificado
+                  </Badge>
                 </div>
 
-                <Badge variant="emerald">
-                  <ShieldCheck className="w-3 h-3" />
-                  Verificado
-                </Badge>
+                <div className="flex items-center gap-1 text-amber-400">
+                  {[...Array(rev.rating)].map((_, i) => (
+                    <Star key={i} className="w-3.5 h-3.5 fill-current" />
+                  ))}
+                </div>
+
+                <p className="text-xs text-gray-300 leading-relaxed italic">
+                  "{rev.comment}"
+                </p>
               </div>
 
-              <div className="flex items-center gap-1 text-amber-400">
-                {[...Array(rev.rating)].map((_, i) => (
-                  <Star key={i} className="w-3.5 h-3.5 fill-current" />
-                ))}
+              <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-gray-500">
+                <span>{rev.productName}</span>
+                <span>{rev.date}</span>
               </div>
-
-              <p className="text-xs text-gray-300 leading-relaxed italic">
-                "{rev.comment}"
-              </p>
             </div>
-
-            <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-gray-500">
-              <span>{rev.productName}</span>
-              <span>{rev.date}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Convite Discord Reviews */}
       <div className="glass-card rounded-2xl p-6 border border-[#5865F2]/25 bg-[#5865F2]/5 flex flex-col sm:flex-row items-center justify-between gap-4">
