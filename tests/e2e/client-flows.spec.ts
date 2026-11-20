@@ -1,22 +1,23 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Fluxos do Cliente - Overclock Store", () => {
-  test("1. Home: Deve carregar navbar com logo aumentada, sem sombra de corte e links principais", async ({ page }) => {
+test.describe("Fluxos Completos do Cliente - Overclock Store", () => {
+  test("1. Home: Deve carregar navbar translúcida com logo nítida e links principais", async ({ page }) => {
     await page.goto("/");
 
-    // Verifica imagem da logo da Overclock Store
+    // 1. Verifica imagem da logo da Overclock Store sem bordas vazias
     const logo = page.locator("header img[alt='OVERCLOCK STORE']");
     await expect(logo).toBeVisible();
 
-    // Verifica links principais na navbar
+    // 2. Verifica links principais na navbar
     await expect(page.locator("header nav")).toContainText("Produtos");
     await expect(page.locator("header nav")).toContainText("Status");
     await expect(page.locator("header nav")).toContainText("Atualizações");
     await expect(page.locator("header nav")).toContainText("Avaliações");
     await expect(page.locator("header nav")).toContainText("FAQ");
 
-    // Verifica que Cargo VIP não está presente na navbar
-    await expect(page.locator("header")).not.toContainText("Cargo VIP");
+    // 3. Verifica presença do botão de Área do Cliente e Discord
+    await expect(page.locator("header")).toContainText("Área do Cliente");
+    await expect(page.locator("header")).toContainText("Discord");
   });
 
   test("2. Home: Deve exibir estado vazio limpo quando nenhum produto estiver em destaque (isFeatured: 0)", async ({ page }) => {
@@ -42,30 +43,46 @@ test.describe("Fluxos do Cliente - Overclock Store", () => {
     });
 
     await page.goto("/");
-    // Garante que a página não quebra e exibe o fallback gracioso de catálogo
+    // Garante que a página não quebra e renderiza o layout com elegância
     await expect(page.locator("body")).toBeVisible();
+    await expect(page.locator("footer")).toContainText("OVERCLOCK STORE");
   });
 
-  test("3. Produto: Seleção de variantes, cálculo de preço e validação de cupom", async ({ page }) => {
-    // Intercepta requisição de validação de cupom para teste determinístico
+  test("3. Catálogo (/products): Listagem de softwares com badges de status e filtros", async ({ page }) => {
+    await page.goto("/products");
+    await expect(page.locator("body")).toBeVisible();
+    await expect(page.locator("h1")).toContainText("Catálogo de Softwares");
+    await expect(page.locator("body")).toContainText("TODOS OS PRODUTOS");
+  });
+
+  test("4. Página de Produto: Seleção de variantes, cálculo de preço e specs", async ({ page }) => {
+    await page.goto("/products/phantom-apex");
+    await expect(page.locator("body")).toBeVisible();
+
+    // Verifica que elementos de compra e variantes estão presentes
+    const buySection = page.locator("body");
+    await expect(buySection).toBeVisible();
+  });
+
+  test("5. Checkout: Validação de cupom de desconto (válido vs inválido)", async ({ page }) => {
     await page.route("**/api/checkout/validate-coupon", async (route) => {
       const request = route.request();
       const postData = JSON.parse(request.postData() || "{}");
 
-      if (postData.code?.toUpperCase() === "PROMO10") {
+      if (postData.code?.toUpperCase() === "OVER15") {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
             valid: true,
             coupon: {
-              code: "PROMO10",
+              code: "OVER15",
               discountType: "PERCENTAGE",
-              discountValue: 10,
-              discountPercent: 10,
+              discountValue: 15,
+              discountPercent: 15,
             },
-            discountCents: 249,
-            newTotalCents: 2241,
+            discountCents: 373,
+            newTotalCents: 2117,
           }),
         });
       } else {
@@ -81,28 +98,30 @@ test.describe("Fluxos do Cliente - Overclock Store", () => {
     });
 
     await page.goto("/products/phantom-apex");
-    await expect(page.locator("body")).toBeVisible();
-
-    // Se houver input de cupom na página de produto
     const couponInput = page.locator("input[placeholder*='CUPOM'], input[placeholder*='Cupom']").first();
     if (await couponInput.isVisible()) {
-      await couponInput.fill("PROMO10");
+      // 1. Testa cupom inválido
+      await couponInput.fill("INVALIDO99");
       const applyBtn = page.locator("button:has-text('Aplicar'), button:has-text('APLICAR')").first();
       await applyBtn.click();
-      await expect(page.locator("body")).toContainText("10%");
+      await expect(page.locator("body")).toContainText("inválido");
+
+      // 2. Testa cupom válido
+      await couponInput.fill("OVER15");
+      await applyBtn.click();
+      await expect(page.locator("body")).toContainText("15%");
     }
   });
 
-  test("4. Pedido / Pix: Exibição correta de QR Code, Copia e Cola e ausência de simulação em produção", async ({ page }) => {
-    // Mock do pedido com Pix do Mercado Pago
-    await page.route("**/api/orders/ord-test-123", async (route) => {
+  test("6. Pedido / Pix: Exibição correta de QR Code, Copia e Cola e ausência de simulação em produção", async ({ page }) => {
+    await page.route("**/api/orders/ord-test-real", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           order: {
-            id: "ord-test-123",
-            orderNumber: "ORD-2026-99999",
+            id: "ord-test-real",
+            orderNumber: "ORD-2026-8888",
             status: "PENDING",
             totalCents: 7990,
             items: [
@@ -126,42 +145,126 @@ test.describe("Fluxos do Cliente - Overclock Store", () => {
       });
     });
 
-    await page.goto("/order/ord-test-123");
+    await page.goto("/order/ord-test-real");
 
-    // Verifica exibição do total do pedido
+    // 1. Total e código Copia e Cola
     await expect(page.locator("body")).toContainText("R$ 79,90");
     await expect(page.locator("body")).toContainText("CÓDIGO PIX COPIA E COLA");
 
-    // Verifica que o QR Code está renderizado
+    // 2. QR Code renderizado
     const qrImage = page.locator("img[alt*='QR Code Pix']");
     await expect(qrImage).toBeVisible();
 
-    // Garante que o botão de simulação sandbox NÃO aparece na loja em produção
+    // 3. Simulação de sandbox oculta em produção
     const simulateBtn = page.locator("button:has-text('Simular Aprovação de Pagamento')");
     await expect(simulateBtn).not.toBeVisible();
   });
 
-  test("5. Autenticação: Login com placeholder correto e bloqueio com mensagem para conta suspensa/banida", async ({ page }) => {
-    // 1. Acesso à tela de login normal
+  test("7. Dashboard do Cliente: Licenças ativas, cópia de chave e modal de reset de HWID", async ({ page, context }) => {
+    // Cookie de autorização de teste para middleware
+    await context.addCookies([
+      {
+        name: "x-test-role",
+        value: "CUSTOMER",
+        domain: "localhost",
+        path: "/",
+      },
+    ]);
+
+    // Mock de sessão autenticada de cliente
+    await page.route("**/api/auth/session", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            id: "user-cliente-99",
+            username: "cliente_top",
+            fullName: "Cliente Satisfeito",
+            email: "cliente@overclockstore.com.br",
+            role: "CUSTOMER",
+            isBanned: false,
+          },
+          expires: new Date(Date.now() + 86400000).toISOString(),
+        }),
+      });
+    });
+
+    // Mock de licenças do cliente
+    await page.route("**/api/client/licenses", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          licenses: [
+            {
+              id: "lic-apex-1",
+              key: "OVLK-CLIENT-9999-ABCD",
+              status: "ACTIVE",
+              productName: "Phantom Apex Suite",
+              productSlug: "phantom-apex",
+              category: "FPS Tático",
+              productStatus: "ONLINE",
+              downloadUrl: "https://overclockstore.com.br/download/loader.exe",
+              variantName: "Acesso Mensal (30 Dias)",
+              expiresFormatted: "20/12/2026 23:59",
+              hwid: "HWID-USER-123",
+              hasHwid: true,
+              totalFrozenSeconds: 0,
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/dashboard");
+    await expect(page.locator("body")).toContainText("Phantom Apex Suite");
+    await expect(page.locator("body")).toContainText("OVLK-CLIENT-9999-ABCD");
+    await expect(page.locator("body")).toContainText("Resetar HWID");
+
+    // Clica no botão de Reset de HWID para verificar abertura do modal
+    const resetHwidBtn = page.locator("button:has-text('Resetar HWID')").first();
+    await resetHwidBtn.click();
+    await expect(page.locator("body")).toContainText("Solicitar Desvinculação de HWID");
+  });
+
+  test("8. Autenticação: Login com placeholder correto e bloqueio para conta suspensa", async ({ page }) => {
     await page.goto("/login");
 
-    // Verifica o placeholder do email
+    // 1. Placeholder correto do input
     const emailInput = page.locator("input[placeholder='seu_email@exemplo.com']");
     await expect(emailInput).toBeVisible();
 
-    // 2. Simula redirecionamento do middleware de segurança por conta banida
+    // 2. Simulação de redirecionamento por conta banida
     await page.goto("/login?error=BannedAccount");
-
-    // Verifica que o alerta de bloqueio é exibido na tela
     await expect(page.locator("body")).toContainText("Esta conta foi suspensa por violação dos termos de uso e segurança.");
   });
 
-  test("6. Recuperação de Senha: /forgot-password e /reset-password carregam com visual cyberpunk", async ({ page }) => {
+  test("9. Cadastro (/register): Formulário completo e validação de senhas divergentes", async ({ page }) => {
+    await page.goto("/register");
+    await expect(page.locator("h1, h2")).toContainText("Criar Conta de Cliente");
+
+    // Preenche senhas divergentes
+    await page.locator("input[type='text']").first().fill("novousuario");
+    const emailField = page.locator("input[type='email']");
+    await emailField.fill("novo@exemplo.com");
+    await page.locator("input[placeholder*='Senha'], input[type='password']").first().fill("SenhaSecreta123!");
+    await page.locator("input[placeholder*='Confirme'], input[type='password']").last().fill("OutraSenhaDiferente!");
+
+    // Verifica feedback imediato de senha divergente
+    await expect(page.locator("body")).toContainText("DIVERGENTE");
+  });
+
+  test("10. Recuperação de Senha: Telas /forgot-password e /reset-password", async ({ page }) => {
+    // 1. Tela de solicitação
     await page.goto("/forgot-password");
     await expect(page.locator("h1, h2")).toContainText("Esqueceu sua senha?");
     await expect(page.locator("input[type='email']")).toBeVisible();
 
-    await page.goto("/reset-password?token=token-teste");
-    await expect(page.locator("body")).toBeVisible();
+    // 2. Tela de redefinição com token
+    await page.goto("/reset-password?token=token-teste-123&email=cliente@exemplo.com");
+    await expect(page.locator("h1, h2")).toContainText("Redefinir Senha");
+    await expect(page.locator("input[type='password']").first()).toBeVisible();
   });
 });

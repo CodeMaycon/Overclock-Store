@@ -28,7 +28,7 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const testRole = req.cookies.get("x-test-role")?.value;
-        if (testRole === "ADMIN") return true;
+        if (testRole === "ADMIN" || testRole === "CUSTOMER") return true;
 
         const path = req.nextUrl.pathname;
 

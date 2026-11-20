@@ -17,6 +17,17 @@ export async function requireAdminSession() {
     };
   }
 
+  if (session.user.isBanned) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: "Sua conta foi suspensa por violação dos termos de segurança." },
+        { status: 403 }
+      ),
+      session,
+    };
+  }
+
   if (session.user.role !== Role.ADMIN) {
     return {
       authorized: false,

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Fluxos do Administrador - Overclock Store", () => {
+test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
   test.beforeEach(async ({ page, context }) => {
     // Cookie para contornar NextAuth middleware em ambiente de teste E2E
     await context.addCookies([
@@ -33,7 +33,6 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
   });
 
   test("1. Visão Geral: Deve exibir Faturamento Total sincronizado e Vendas Recentes", async ({ page }) => {
-    // Mock do overview com KPIs reais
     await page.route("**/api/admin/overview", async (route) => {
       await route.fulfill({
         status: 200,
@@ -67,7 +66,7 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
 
     await page.goto("/admin");
 
-    // Verifica que o Faturamento Total exibe o valor formatado correto (e não R$ 0,00)
+    // Verifica que o Faturamento Total exibe o valor formatado real
     await expect(page.locator("body")).toContainText("R$ 1.549,00");
     await expect(page.locator("body")).toContainText("14 pedidos pagos");
 
@@ -77,7 +76,6 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
   });
 
   test("2. Gestão de Produtos: Visualização, sub-abas e persistência de alteração de preços", async ({ page }) => {
-    // Mock de produtos
     await page.route("**/api/admin/products", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
@@ -96,8 +94,6 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
                 variants: [
                   { id: "var-1", name: "Passe Diário (24h)", durationHours: 24, priceCents: 2490, stockCount: 5 },
                   { id: "var-2", name: "Acesso Semanal (7 Dias)", durationHours: 168, priceCents: 7990, stockCount: 4 },
-                  { id: "var-3", name: "Acesso Mensal (30 Dias)", durationHours: 720, priceCents: 16990, stockCount: 3 },
-                  { id: "var-4", name: "Licença Vitalícia", isLifetime: true, priceCents: 49990, stockCount: 0 },
                 ],
               },
             ],
@@ -107,16 +103,15 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
     });
 
     await page.goto("/admin");
-    const productsTab = page.locator("button:has-text('Produtos'), button:has-text('Softwares')").first();
+    const productsTab = page.locator("button:has-text('Produtos & Estoque')").first();
     await productsTab.click();
 
-    // Verifica a presença do produto e botões
+    // Verifica a presença do produto e botões de ação
     await expect(page.locator("body")).toContainText("Phantom Apex Suite");
     await expect(page.locator("body")).toContainText("Atribuir Licença Sem Pagamento");
   });
 
-  test("3. Gestão de Chaves: Listagem, remoção e atribuição gratuita para cliente", async ({ page }) => {
-    // Mock de licenças
+  test("3. Gestão de Chaves: Listagem, remoção e filtros de status", async ({ page }) => {
     await page.route("**/api/admin/licenses*", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
@@ -150,7 +145,7 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
     });
 
     await page.goto("/admin");
-    const productsTab = page.locator("button:has-text('Produtos')").first();
+    const productsTab = page.locator("button:has-text('Produtos & Estoque')").first();
     await productsTab.click();
 
     const keysSubTab = page.locator("button:has-text('Estoque de Chaves')");
@@ -161,8 +156,38 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
     }
   });
 
-  test("4. Status & Freeze Time: Alteração de status sincronizando com telemetria", async ({ page }) => {
-    // Mock de status services
+  test("4. Atribuição de Licença Gratuita: Modal de giveaway/sorteio para cliente", async ({ page }) => {
+    await page.route("**/api/admin/products", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          products: [
+            {
+              id: "prod-apex-1",
+              name: "Phantom Apex Suite",
+              slug: "phantom-apex",
+              status: "ONLINE",
+              variants: [{ id: "var-1", name: "Passe Diário (24h)", priceCents: 2490, stockCount: 5 }],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/admin");
+    const productsTab = page.locator("button:has-text('Produtos & Estoque')").first();
+    await productsTab.click();
+
+    const grantBtn = page.locator("button:has-text('Atribuir Licença Sem Pagamento')");
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+      await expect(page.locator("body")).toContainText("Atribuir Licença Sem Pagamento");
+    }
+  });
+
+  test("5. Status & Freeze Time: Alteração de status sincronizando com telemetria", async ({ page }) => {
     await page.route("**/api/admin/status", async (route) => {
       if (route.request().method() === "GET") {
         await route.fulfill({
@@ -180,28 +205,50 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
             ],
           }),
         });
-      } else if (route.request().method() === "PATCH") {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            success: true,
-            message: "Status de Apex Driver Kernel alterado para MAINTENANCE e sincronizado com o catálogo.",
-          }),
-        });
       }
     });
 
     await page.goto("/admin");
-    const statusTab = page.locator("button:has-text('Status'), button:has-text('Telemetria')").first();
+    const statusTab = page.locator("button:has-text('Status & Freeze Time')").first();
     await statusTab.click();
 
     await expect(page.locator("body")).toContainText("Apex Driver Kernel");
     await expect(page.locator("body")).toContainText("OPERACIONAL");
   });
 
-  test("5. Gestão de Clientes: Visualização de ficha com histórico e banimento real", async ({ page }) => {
-    // Mock de usuários
+  test("6. Gestão de Cupons: Criação e visualização de cupons de desconto", async ({ page }) => {
+    await page.route("**/api/admin/coupons", async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            coupons: [
+              {
+                id: "cpn-1",
+                code: "PROMO20",
+                discountType: "PERCENTAGE",
+                discountPercent: 20,
+                usedCount: 5,
+                maxUses: 100,
+                isActive: true,
+              },
+            ],
+          }),
+        });
+      }
+    });
+
+    await page.goto("/admin");
+    const couponsTab = page.locator("button:has-text('Cupons de Desconto')").first();
+    await couponsTab.click();
+
+    await expect(page.locator("body")).toContainText("PROMO20");
+    await expect(page.locator("body")).toContainText("20%");
+    await expect(page.locator("button:has-text('Novo Cupom')")).toBeVisible();
+  });
+
+  test("7. Gestão de Clientes: Visualização de ficha com histórico e licenças", async ({ page }) => {
     await page.route("**/api/admin/users", async (route) => {
       await route.fulfill({
         status: 200,
@@ -224,7 +271,6 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
       });
     });
 
-    // Mock do detalhe do cliente
     await page.route("**/api/admin/users/usr-cliente-1", async (route) => {
       await route.fulfill({
         status: 200,
@@ -264,20 +310,68 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
     });
 
     await page.goto("/admin");
-    const usersTab = page.locator("button:has-text('Clientes'), button:has-text('Usuários')").first();
+    const usersTab = page.locator("button:has-text('Clientes & Blacklist')").first();
     await usersTab.click();
 
     await expect(page.locator("body")).toContainText("@cliente_val");
-    await expect(page.locator("body")).toContainText("Detalhes");
+    await expect(page.locator("button:has-text('Detalhes')").first()).toBeVisible();
 
-    // Clica para abrir detalhes do cliente
+    // Abre detalhes da ficha
     await page.locator("button:has-text('Detalhes')").first().click();
     await expect(page.locator("body")).toContainText("Licenças Digitais do Cliente");
     await expect(page.locator("body")).toContainText("OVLK-VAL-001");
   });
 
-  test("6. Auditoria & Logs: Visualização dos registros de eventos administrativos", async ({ page }) => {
-    // Mock de logs
+  test("8. Banimento e Desbanimento Real de Usuário", async ({ page }) => {
+    // Aceita qualquer prompt de diálogo que o navegador disparar
+    page.on("dialog", async (dialog) => {
+      await dialog.accept("Violação grave dos termos de uso e segurança.");
+    });
+
+    await page.route("**/api/admin/users", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          users: [
+            {
+              id: "usr-cliente-1",
+              username: "cliente_infrator",
+              fullName: "Infrator",
+              email: "infrator@exemplo.com",
+              role: "CUSTOMER",
+              isBanned: false,
+              orderCount: 1,
+              licenseCount: 1,
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/users/usr-cliente-1/ban", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          message: "Conta de @cliente_infrator suspensa com sucesso.",
+        }),
+      });
+    });
+
+    await page.goto("/admin");
+    const usersTab = page.locator("button:has-text('Clientes & Blacklist')").first();
+    await usersTab.click();
+
+    await expect(page.locator("body")).toContainText("@cliente_infrator");
+    const banBtn = page.locator("button:has-text('Banir')").first();
+    await expect(banBtn).toBeVisible();
+    await banBtn.click();
+  });
+
+  test("9. Auditoria & Logs: Visualização dos registros de eventos administrativos", async ({ page }) => {
     await page.route("**/api/admin/audit", async (route) => {
       await route.fulfill({
         status: 200,
@@ -300,7 +394,7 @@ test.describe("Fluxos do Administrador - Overclock Store", () => {
     });
 
     await page.goto("/admin");
-    const auditTab = page.locator("button:has-text('Auditoria'), button:has-text('Logs')").first();
+    const auditTab = page.locator("button:has-text('Auditoria & Logs')").first();
     await auditTab.click();
 
     await expect(page.locator("body")).toContainText("PRODUCT_UPDATED");
