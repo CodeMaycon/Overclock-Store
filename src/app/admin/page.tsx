@@ -1278,19 +1278,33 @@ export default function AdminBackofficePage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
-                    {overviewData.lowStockAlerts.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-xl bg-[#050706] border border-amber-500/20 flex items-center justify-between text-xs font-mono"
-                      >
-                        <span className="text-white truncate font-medium">
-                          {item.productName} ({item.variantName})
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold ml-2 shrink-0">
-                          {item.stock} restando
-                        </span>
-                      </div>
-                    ))}
+                    {overviewData.lowStockAlerts.map((item, idx) => {
+                      const prodName = item.productName || (item as any).name || "Software";
+                      const varName = item.variantName || "Plano";
+                      const stockCount = item.stock ?? (item as any).availableKeys ?? 0;
+                      const isZero = stockCount === 0;
+
+                      return (
+                        <div
+                          key={item.variantId || idx}
+                          className="p-3 rounded-xl bg-[#050706] border border-amber-500/25 flex items-center justify-between gap-2 text-xs font-mono shadow-sm"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${isZero ? "bg-rose-500 animate-pulse" : "bg-amber-400"}`} />
+                            <span className="text-white truncate font-medium">
+                              {prodName} <span className="text-[#86948a] font-normal">({varName})</span>
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold shrink-0 ${
+                            isZero
+                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                              : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          }`}>
+                            {isZero ? "0 restando" : `${stockCount} restando`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

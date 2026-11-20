@@ -45,15 +45,16 @@ export function Navbar() {
       <div className="h-16 max-w-7xl mx-auto flex items-center justify-between gap-4">
         
         {/* Brand / Logo (OVERCLOCK DIGITAL STORE) */}
-        <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-          <div className="relative flex items-center justify-center p-1 rounded-xl bg-surface-container-low border border-white/5 group-hover:border-primary/40 transition-colors shadow-md">
-            <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold overflow-hidden">
-              <span className="material-symbols-outlined text-xl text-primary">bolt</span>
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary-container ring-2 ring-surface-container-lowest" />
+        <Link href="/" className="flex items-center gap-3 shrink-0 group">
+          <div className="relative flex items-center justify-center p-1 rounded-xl bg-surface-container-low border border-white/5 group-hover:border-primary/40 transition-colors shadow-md overflow-hidden">
+            <img
+              src="/logo.jpeg"
+              alt="OVERCLOCK STORE Logo"
+              className="h-8 sm:h-9 w-auto object-contain rounded-lg"
+            />
           </div>
           <div className="flex flex-col">
-            <span className="font-headline-sm text-base sm:text-lg tracking-tight text-on-surface leading-none uppercase font-extrabold">
+            <span className="font-headline-sm text-base sm:text-lg tracking-tight text-on-surface leading-none uppercase font-extrabold group-hover:text-primary transition-colors">
               OVERCLOCK
             </span>
             <span className="font-mono-badge text-[9px] text-primary/80 uppercase tracking-widest mt-1 font-bold">

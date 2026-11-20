@@ -26,13 +26,22 @@ export async function GET() {
       where: { role: "RESELLER" },
     });
 
-    // 3. Alertas de Estoque Baixo (produtos com menos de 3 chaves disponíveis)
-    const productsWithStock = await prisma.product.findMany({
-      where: { status: { not: "DISABLED" } },
+    // 3. Alertas de Estoque Baixo (variantes ativas com <= 3 chaves disponíveis)
+    const variantsWithStock = await prisma.productVariant.findMany({
+      where: {
+        product: { status: { not: "DISABLED" } },
+        isActive: true,
+      },
       select: {
         id: true,
         name: true,
-        slug: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
         _count: {
           select: {
             licenseKeys: {
@@ -41,16 +50,23 @@ export async function GET() {
           },
         },
       },
+      orderBy: [
+        { product: { name: "asc" } },
+        { orderPriority: "asc" },
+      ],
     });
 
-    const lowStockAlerts = productsWithStock
-      .filter((p) => p._count.licenseKeys < 5)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        slug: p.slug,
-        availableKeys: p._count.licenseKeys,
-        isCritical: p._count.licenseKeys === 0,
+    const lowStockAlerts = variantsWithStock
+      .filter((v) => v._count.licenseKeys <= 3)
+      .map((v) => ({
+        variantId: v.id,
+        variantName: v.name,
+        productId: v.product.id,
+        productName: v.product.name,
+        slug: v.product.slug,
+        stock: v._count.licenseKeys,
+        availableKeys: v._count.licenseKeys,
+        isCritical: v._count.licenseKeys === 0,
       }));
 
     // 4. Últimas Vendas (Real)

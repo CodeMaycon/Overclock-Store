@@ -8,9 +8,13 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           {/* Column 1: Brand */}
           <div className="lg:col-span-1 flex flex-col gap-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary font-bold">
-                <span className="material-symbols-outlined text-xl text-primary">bolt</span>
+            <div className="flex items-center gap-3">
+              <div className="relative flex items-center justify-center p-1 rounded-xl bg-surface-container-high border border-white/5 overflow-hidden">
+                <img
+                  src="/logo.jpeg"
+                  alt="OVERCLOCK STORE"
+                  className="h-8 w-auto object-contain rounded-lg"
+                />
               </div>
               <div className="flex flex-col">
                 <span className="font-headline-sm text-lg uppercase text-on-surface tracking-tight font-extrabold leading-none">

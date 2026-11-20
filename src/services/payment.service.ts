@@ -53,6 +53,7 @@ export class PaymentService {
                 first_name: input.customerName.split(" ")[0] || "Cliente",
                 last_name: input.customerName.split(" ").slice(1).join(" ") || "Overclock",
               },
+              external_reference: input.orderId,
               notification_url: `${input.appUrl}/api/webhooks/mercadopago`,
             }),
           });
@@ -281,6 +282,28 @@ export class PaymentService {
 
             await DiscordService.syncRoles(discordId, productRoles);
           }
+
+          // Disparo de e-mail de entrega via Resend
+          try {
+            const deliveredKey = await prisma.licenseKey.findFirst({
+              where: { orderId: fullOrder.id },
+            });
+
+            if (deliveredKey && fullOrder.user.email) {
+              const primaryItem = fullOrder.items[0];
+              await PaymentService.sendDeliveryEmail({
+                toEmail: fullOrder.user.email,
+                customerName: fullOrder.user.fullName || fullOrder.user.username,
+                orderNumber: fullOrder.orderNumber,
+                productName: primaryItem?.product?.name || "Software Overclock",
+                variantName: primaryItem?.variantId ? "Plano Ativo" : "Licença",
+                licenseKey: deliveredKey.key,
+                amountFormatted: `R$ ${(fullOrder.totalCents / 100).toFixed(2).replace(".", ",")}`,
+              });
+            }
+          } catch (emailErr) {
+            console.error("[CONFIRM_PAYMENT_EMAIL_ERR]", emailErr);
+          }
         }
       } catch (err) {
         console.warn("[CONFIRM_PAYMENT_DISCORD_SYNC_WARN]", err);
@@ -288,6 +311,94 @@ export class PaymentService {
     }
 
     return result;
+  }
+
+  /**
+   * Disparo de e-mail transacional via Resend REST API
+   */
+  static async sendDeliveryEmail(params: {
+    toEmail: string;
+    customerName: string;
+    orderNumber: string;
+    productName: string;
+    variantName: string;
+    licenseKey: string;
+    amountFormatted: string;
+  }) {
+    const resendKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "Overclock Store <onboarding@resend.dev>";
+
+    if (!resendKey || resendKey.startsWith("re_xxx") || resendKey.startsWith("fake")) {
+      console.log(`[RESEND_EMAIL_SKIPPED] Chave RESEND_API_KEY não configurada ou de exemplo. E-mail de entrega não enviado para ${params.toEmail}.`);
+      return;
+    }
+
+    try {
+      const appUrl = process.env.NEXTAUTH_URL || "https://overclockstore.com";
+      const htmlContent = `
+        <div style="background-color: #050706; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #ffffff; font-size: 24px; margin: 0; font-weight: 800; letter-spacing: -0.5px;">OVERCLOCK<span style="color: #10b981;">.STORE</span></h1>
+            <p style="color: #86948a; font-size: 11px; margin: 4px 0 0 0; text-transform: uppercase; letter-spacing: 2px;">Licença Digital Liberada</p>
+          </div>
+
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #10b981; font-size: 12px; font-weight: 700; margin: 0 0 6px 0; text-transform: uppercase;">Pagamento Aprovado Instantaneamente</p>
+            <h2 style="color: #ffffff; font-size: 18px; margin: 0 0 4px 0;">Pedido #${params.orderNumber}</h2>
+            <p style="color: #bbcabf; font-size: 13px; margin: 0;">Olá, <strong>${params.customerName}</strong>! Seu software já está disponível para uso.</p>
+          </div>
+
+          <div style="background-color: #0b0f0d; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <div style="margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
+              <span style="color: #86948a; font-size: 11px; text-transform: uppercase; display: block;">Produto Adquirido:</span>
+              <strong style="color: #ffffff; font-size: 15px;">${params.productName}</strong> <span style="color: #10b981; font-size: 12px;">(${params.variantName})</span>
+            </div>
+
+            <div>
+              <span style="color: #86948a; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px;">Sua Chave de Ativação Digital:</span>
+              <div style="background-color: #050706; border: 1px solid #10b981; border-radius: 8px; padding: 14px; font-family: monospace; font-size: 16px; font-weight: bold; color: #10b981; text-align: center; letter-spacing: 1.5px; word-break: break-all;">
+                ${params.licenseKey}
+              </div>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin-bottom: 24px;">
+            <a href="${appUrl}/dashboard" style="background-color: #10b981; color: #050706; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; text-decoration: none; display: inline-block;">
+              Acessar Painel do Cliente & Baixar Loader
+            </a>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 20px; text-align: center; font-size: 12px; color: #86948a; line-height: 1.6;">
+            <p style="margin: 0 0 8px 0;">Dúvidas ou suporte? Entre no nosso Discord oficial: <a href="https://discord.gg/gqMDjvaSC" style="color: #10b981; text-decoration: none;">discord.gg/gqMDjvaSC</a></p>
+            <p style="margin: 0;">&copy; ${new Date().getFullYear()} Overclock Store. Todos os direitos reservados.</p>
+          </div>
+        </div>
+      `;
+
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resendKey}`,
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: [params.toEmail],
+          subject: `⚡ Sua Licença Overclock Store - Pedido #${params.orderNumber}`,
+          html: htmlContent,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[RESEND_EMAIL_SUCCESS] E-mail de entrega enviado para ${params.toEmail}. Resend ID: ${data.id}`);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.error(`[RESEND_EMAIL_ERROR] Falha ao enviar e-mail via Resend:`, errData);
+      }
+    } catch (err) {
+      console.error(`[RESEND_EMAIL_EXCEPTION]`, err);
+    }
   }
 
   /**

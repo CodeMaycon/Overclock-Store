@@ -7,6 +7,16 @@ import { Suspense } from "react";
 export const metadata: Metadata = {
   title: "OVERCLOCK STORE // Licenças Digitais e Softwares de Alta Performance",
   description: "A melhor loja de licenças digitais de software com entrega instantânea automatizada, proteção de HWID e suporte 24/7.",
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png" },
+      { url: "/favicone.jpeg", type: "image/jpeg" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.png",
+  },
 };
 
 import { AuthProvider } from "@/lib/auth-context";
