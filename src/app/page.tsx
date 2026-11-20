@@ -6,19 +6,22 @@ import { MOCK_PRODUCTS } from "@/lib/mock-data";
 
 export default function HomePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const [products, setProducts] = useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
 
   useEffect(() => {
     async function loadFeaturedProducts() {
       try {
-        const res = await fetch("/api/products?featuredOnly=true");
+        const res = await fetch("/api/products?featured=true", { cache: "no-store" });
         const data = await res.json();
-        if (data.success && data.products.length > 0) {
+        if (data.success && Array.isArray(data.products)) {
           setProducts(data.products);
+        } else {
+          setProducts([]);
         }
       } catch (e) {
         console.error("Erro ao carregar produtos da vitrine:", e);
+        setProducts([]);
       } finally {
         setIsLoadingProducts(false);
       }
@@ -83,7 +86,7 @@ export default function HomePage() {
     {
       category: "[INTEGRAÇÃO DISCORD]",
       q: "Como funciona a verificação e cargos no Discord?",
-      a: "No seu painel do cliente, basta clicar em 'Vincular Discord'. O nosso Bot reconhece seu ID e aplica automaticamente o cargo @Verificado para liberar os canais da comunidade e o cargo @Cliente exclusivo com canais VIP de suporte se você possuir licença ativa."
+      a: "No seu painel do cliente, basta clicar em 'Vincular Discord'. O nosso Bot reconhece seu ID e aplica automaticamente o cargo @Verificado para liberar os canais da comunidade e suporte oficial aos clientes."
     },
     {
       category: "[SEGURANÇA & GARANTIA]",
@@ -229,39 +232,59 @@ export default function HomePage() {
         </div>
 
         {/* Product 3-Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {products.slice(0, 3).map((prod: any, idx: number) => {
-            const minPrice = prod.minPriceCents
-              ? prod.minPriceCents / 100
-              : prod.variants?.length > 0
-              ? Math.min(...prod.variants.map((v: any) => v.priceCents)) / 100
-              : 24.9;
-            const isFeatured = idx === 0 || prod.isFeatured;
-            const stock = prod.stockCount !== undefined ? prod.stockCount : 20;
+        {isLoadingProducts ? (
+          <div className="py-12 flex flex-col items-center justify-center gap-3 text-on-surface-variant font-mono-data text-xs">
+            <span className="material-symbols-outlined text-2xl text-primary animate-spin">progress_activity</span>
+            <span>Carregando vitrine de softwares...</span>
+          </div>
+        ) : products.length === 0 ? (
+          <div className="p-8 rounded-xl bg-surface-container-low border border-white/5 text-center space-y-3">
+            <span className="material-symbols-outlined text-3xl text-primary">inventory_2</span>
+            <h3 className="font-headline-sm text-base font-bold text-on-surface">Novos lançamentos em breve</h3>
+            <p className="font-body-sm text-xs text-on-surface-variant max-w-md mx-auto">
+              Nossos desenvolvedores estão preparando a nova linha de softwares indetectáveis. Confira nosso catálogo completo.
+            </p>
+            <Link
+              href="/products"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-variant text-primary text-xs font-bold transition-all"
+            >
+              <span>Ver Catálogo Completo →</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products.map((prod: any, idx: number) => {
+              const minPrice = prod.minPriceCents
+                ? prod.minPriceCents / 100
+                : prod.variants?.length > 0
+                ? Math.min(...prod.variants.map((v: any) => v.priceCents)) / 100
+                : 24.9;
+              const isFeatured = prod.isFeatured;
+              const stock = prod.stockCount !== undefined ? prod.stockCount : 0;
 
-            return (
-              <div
-                key={prod.id}
-                className="relative flex flex-col justify-between rounded-xl bg-gradient-to-b from-[#06281A] via-surface-container-low to-surface-container-lowest p-6 shadow-xl shadow-primary-container/5 transition-all duration-300 hover:-translate-y-1 border border-white/5 group"
-              >
-                <div className="flex flex-col">
-                  {/* Top Badges */}
-                  <div className="flex items-center justify-between gap-2 mb-4">
-                    {isFeatured ? (
-                      <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-bold bg-primary-container text-on-primary-container whitespace-nowrap shrink-0">
-                        MAIS VENDIDO
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-semibold bg-surface-container text-primary whitespace-nowrap shrink-0">
-                        {prod.category}
-                      </span>
-                    )}
+              return (
+                <div
+                  key={prod.id}
+                  className="relative flex flex-col justify-between rounded-xl bg-gradient-to-b from-[#06281A] via-surface-container-low to-surface-container-lowest p-6 shadow-xl shadow-primary-container/5 transition-all duration-300 hover:-translate-y-1 border border-white/5 group"
+                >
+                  <div className="flex flex-col">
+                    {/* Top Badges */}
+                    <div className="flex items-center justify-between gap-2 mb-4">
+                      {isFeatured ? (
+                        <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-bold bg-primary-container text-on-primary-container whitespace-nowrap shrink-0">
+                          DESTAQUE
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded font-mono-badge text-[11px] uppercase font-semibold bg-surface-container text-primary whitespace-nowrap shrink-0">
+                          {prod.category}
+                        </span>
+                      )}
 
-                    <span className="inline-flex items-center gap-1 font-mono-badge text-[11px] text-primary whitespace-nowrap shrink-0">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-                      {stock > 0 ? `Entrega Imediata (${stock} keys)` : "Estoque Esgotado"}
-                    </span>
-                  </div>
+                      <span className="inline-flex items-center gap-1 font-mono-badge text-[11px] text-primary whitespace-nowrap shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+                        {stock > 0 ? `Entrega Imediata (${stock} keys)` : "Sob Demanda"}
+                      </span>
+                    </div>
 
                   {/* Thumbnail HUD Box */}
                   <div className="relative w-full h-[140px] rounded-lg bg-surface-container-lowest/80 overflow-hidden mb-4 flex flex-col items-center justify-center border border-white/5">
@@ -341,6 +364,7 @@ export default function HomePage() {
             );
           })}
         </div>
+      )}
 
       </section>
 

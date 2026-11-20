@@ -45,22 +45,12 @@ export function Navbar() {
       <div className="h-16 max-w-7xl mx-auto flex items-center justify-between gap-4">
         
         {/* Brand / Logo (OVERCLOCK DIGITAL STORE) */}
-        <Link href="/" className="flex items-center gap-3 shrink-0 group">
-          <div className="relative flex items-center justify-center p-1 rounded-xl bg-surface-container-low border border-white/5 group-hover:border-primary/40 transition-colors shadow-md overflow-hidden">
-            <img
-              src="/logo.jpeg"
-              alt="OVERCLOCK STORE Logo"
-              className="h-8 sm:h-9 w-auto object-contain rounded-lg"
-            />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-headline-sm text-base sm:text-lg tracking-tight text-on-surface leading-none uppercase font-extrabold group-hover:text-primary transition-colors">
-              OVERCLOCK
-            </span>
-            <span className="font-mono-badge text-[9px] text-primary/80 uppercase tracking-widest mt-1 font-bold">
-              DIGITAL STORE
-            </span>
-          </div>
+        <Link href="/" className="flex items-center shrink-0 group py-1" aria-label="Overclock Store">
+          <img
+            src="/logo.png"
+            alt="OVERCLOCK STORE"
+            className="h-9 sm:h-11 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+          />
         </Link>
 
         {/* Central Floating Pill Navbar (Exact Stitch Spec) */}
@@ -97,7 +87,7 @@ export function Navbar() {
             <span className="material-symbols-outlined text-primary text-base">forum</span>
             <span>Discord</span>
             <span className="font-mono-badge text-mono-badge px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container font-semibold">
-              VIP
+              OFICIAL
             </span>
           </a>
 
@@ -280,7 +270,7 @@ export function Navbar() {
             >
               <div className="flex items-center gap-2">
                 <span className="text-base">🎮</span>
-                <span>Comunidade Discord VIP</span>
+                <span>Comunidade Discord Oficial</span>
               </div>
               <span className="px-2 py-0.5 rounded bg-[#5865F2]/20 text-[10px] font-mono">
                 OFICIAL

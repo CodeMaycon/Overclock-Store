@@ -198,22 +198,59 @@ export class PaymentService {
       });
 
       // 4. Transiciona a chave reservada para NOT_ACTIVATED
-      const reservedKey = await tx.licenseKey.findFirst({
+      let targetKey = await tx.licenseKey.findFirst({
         where: {
           orderId: order.id,
           status: KeyStatus.RESERVED,
         },
       });
 
-      if (reservedKey) {
-        await tx.licenseKey.update({
-          where: { id: reservedKey.id },
+      if (targetKey) {
+        targetKey = await tx.licenseKey.update({
+          where: { id: targetKey.id },
           data: {
             status: KeyStatus.NOT_ACTIVATED,
             userId: order.userId,
             reservedUntil: null,
           },
         });
+      } else {
+        // Fallback resiliente: caso a chave reservada tenha expirado a reserva ou esteja desvinculada
+        const existingKey = await tx.licenseKey.findFirst({
+          where: { orderId: order.id },
+        });
+
+        if (existingKey) {
+          targetKey = await tx.licenseKey.update({
+            where: { id: existingKey.id },
+            data: {
+              status: KeyStatus.NOT_ACTIVATED,
+              userId: order.userId,
+              reservedUntil: null,
+            },
+          });
+        } else if (order.items.length > 0) {
+          const primaryItem = order.items[0];
+          const availableKey = await tx.licenseKey.findFirst({
+            where: {
+              productId: primaryItem.productId,
+              variantId: primaryItem.variantId,
+              status: KeyStatus.UNASSIGNED,
+            },
+          });
+
+          if (availableKey) {
+            targetKey = await tx.licenseKey.update({
+              where: { id: availableKey.id },
+              data: {
+                status: KeyStatus.NOT_ACTIVATED,
+                orderId: order.id,
+                userId: order.userId,
+                reservedUntil: null,
+              },
+            });
+          }
+        }
       }
 
       // 5. Incrementa cupom se utilizado
@@ -238,7 +275,7 @@ export class PaymentService {
             gateway,
             gatewayPaymentId,
             totalCents: order.totalCents,
-            keyAssignedId: reservedKey?.id,
+            keyAssignedId: targetKey?.id,
           },
         },
       });
@@ -364,7 +401,7 @@ export class PaymentService {
 
           <div style="text-align: center; margin-bottom: 24px;">
             <a href="${appUrl}/dashboard" style="background-color: #10b981; color: #050706; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; text-decoration: none; display: inline-block;">
-              Acessar Painel do Cliente & Baixar Loader
+              Acessar Painel do Cliente & Minhas Licenças
             </a>
           </div>
 

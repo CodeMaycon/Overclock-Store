@@ -8,23 +8,13 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           {/* Column 1: Brand */}
           <div className="lg:col-span-1 flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="relative flex items-center justify-center p-1 rounded-xl bg-surface-container-high border border-white/5 overflow-hidden">
-                <img
-                  src="/logo.jpeg"
-                  alt="OVERCLOCK STORE"
-                  className="h-8 w-auto object-contain rounded-lg"
-                />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-headline-sm text-lg uppercase text-on-surface tracking-tight font-extrabold leading-none">
-                  OVERCLOCK
-                </span>
-                <span className="font-mono-badge text-[9px] text-primary/80 uppercase tracking-widest mt-1 font-bold">
-                  DIGITAL STORE
-                </span>
-              </div>
-            </div>
+            <Link href="/" className="flex items-center shrink-0 w-fit" aria-label="Overclock Store">
+              <img
+                src="/logo.png"
+                alt="OVERCLOCK STORE"
+                className="h-10 sm:h-12 w-auto object-contain"
+              />
+            </Link>
             <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
               Plataforma líder em fornecimento de licenças de software digitais, entrega instantânea automatizada e segurança de alta performance.
             </p>
@@ -108,7 +98,7 @@ export function Footer() {
                   Servidor Discord
                 </a>
                 <span className="font-mono-badge text-mono-badge text-primary px-1.5 py-0.5 rounded bg-surface-container font-semibold">
-                  Comunidade VIP
+                  Comunidade Oficial
                 </span>
               </li>
               <li>

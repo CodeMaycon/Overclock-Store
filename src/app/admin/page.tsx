@@ -41,7 +41,8 @@ import {
   Eye,
   Check,
   Ban,
-  AlertCircle
+  AlertCircle,
+  EyeOff
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/lib/auth-context";
@@ -291,6 +292,7 @@ export default function AdminBackofficePage() {
   const [couponsList, setCouponsList] = useState<CouponItem[]>([]);
   const [loadingCoupons, setLoadingCoupons] = useState(false);
   const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
   const [couponFormCode, setCouponFormCode] = useState("");
   const [couponFormType, setCouponFormType] = useState<"PERCENT" | "FIXED">("PERCENT");
   const [couponFormValue, setCouponFormValue] = useState("15");
@@ -638,7 +640,7 @@ export default function AdminBackofficePage() {
       const parsedMaxUses = couponFormMaxUses && parseInt(couponFormMaxUses, 10) > 0 ? parseInt(couponFormMaxUses, 10) : null;
       const parsedMinAmount = couponFormMinAmount && couponFormMinAmount.trim() !== "" ? parsePriceToCents(couponFormMinAmount) : 0;
 
-      const payload = {
+      const payload: any = {
         code: couponFormCode.trim().toUpperCase(),
         discountType: isPercent ? "PERCENTAGE" : "FIXED",
         discountValue: discountVal,
@@ -650,17 +652,28 @@ export default function AdminBackofficePage() {
         active: true,
       };
 
-      const res = await fetch("/api/admin/coupons", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      let res: Response;
+      if (editingCouponId) {
+        payload.id = editingCouponId;
+        res = await fetch("/api/admin/coupons", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch("/api/admin/coupons", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao criar cupom.");
+      if (!res.ok) throw new Error(data.error || "Erro ao salvar cupom.");
 
-      showAdminToast(data.message || `Cupom ${payload.code} criado com sucesso!`);
+      showAdminToast(data.message || `Cupom ${payload.code} ${editingCouponId ? "atualizado" : "criado"} com sucesso!`);
       setCouponModalOpen(false);
+      setEditingCouponId(null);
       setCouponFormCode("");
       setCouponFormValue("15");
       setCouponFormMaxUses("");
@@ -671,6 +684,29 @@ export default function AdminBackofficePage() {
     } finally {
       setSavingCoupon(false);
     }
+  };
+
+  const handleOpenNewCoupon = () => {
+    setEditingCouponId(null);
+    setCouponFormCode("");
+    setCouponFormType("PERCENT");
+    setCouponFormValue("15");
+    setCouponFormMaxUses("");
+    setCouponFormMinAmount("");
+    setCouponModalOpen(true);
+  };
+
+  const handleOpenEditCoupon = (cup: any) => {
+    setEditingCouponId(cup.id);
+    setCouponFormCode(cup.code);
+    const isPercent = cup.discountType === "PERCENTAGE" || (cup.discountPercent !== null && cup.discountPercent !== undefined);
+    setCouponFormType(isPercent ? "PERCENT" : "FIXED");
+    const discountVal = cup.discountValue ?? cup.discountPercent ?? (cup.discountAmountCents ? cup.discountAmountCents / 100 : 15);
+    setCouponFormValue(String(discountVal));
+    setCouponFormMaxUses(cup.maxUses ? String(cup.maxUses) : "");
+    const minVal = cup.minOrderCents ?? cup.minOrderAmountCents ?? 0;
+    setCouponFormMinAmount(minVal > 0 ? centsToBr(minVal) : "");
+    setCouponModalOpen(true);
   };
 
   const handleToggleCoupon = async (id: string, currentActive: boolean) => {
@@ -766,7 +802,7 @@ export default function AdminBackofficePage() {
 
     // Abas Técnicas Padrão
     setProdFormFeatures(
-      "Injeção segura Ring-0 indetectável\nProteção contra memory scans e snapshots\nAutoatendimento de HWID instantâneo\nSuporte VIP com call prioritária no Discord"
+      "Injeção segura Ring-0 indetectável\nProteção contra memory scans e snapshots\nAutoatendimento de HWID instantâneo\nSuporte Dedicado 24/7 no Discord"
     );
     setProdFormSpecOS("Windows 10 / 11 (x64)");
     setProdFormSpecCPU("Intel & AMD");
@@ -858,7 +894,9 @@ export default function AdminBackofficePage() {
         slug: prodFormSlug,
         category: prodFormCategory,
         tagline: prodFormTagline,
+        shortDescription: prodFormTagline,
         description: prodFormDesc,
+        fullDescription: prodFormDesc,
         status: prodFormStatus,
         isFeatured: prodFormIsFeatured,
         videoUrl: prodFormVideo.trim() || null,
@@ -916,19 +954,43 @@ export default function AdminBackofficePage() {
     }
   };
 
-  // Excluir ou Ocultar Produto
+  // Alternar Status: Ativar (ONLINE) / Desativar (DISABLED)
+  const handleToggleProductStatus = async (prod: AdminProduct) => {
+    try {
+      const newStatus = prod.status === "DISABLED" ? "ONLINE" : "DISABLED";
+      const res = await fetch(`/api/admin/products/${prod.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao alterar status do produto.");
+
+      showAdminToast(
+        newStatus === "ONLINE"
+          ? `Produto "${prod.name}" reativado na vitrine pública!`
+          : `Produto "${prod.name}" desativado da vitrine pública.`
+      );
+      loadAdminData();
+    } catch (err: any) {
+      alert(`Falha ao alterar status: ${err.message}`);
+    }
+  };
+
+  // Excluir Definitivamente o Produto (com chaves e variantes)
   const handleDeleteProduct = async (prod: AdminProduct) => {
-    if (!confirm(`Deseja realmente remover ou desativar o produto "${prod.name}"?`)) return;
+    const confirmMessage = `⚠️ ATENÇÃO: EXCLUSÃO PERMANENTE ⚠️\n\nDeseja realmente excluir em definitivo o produto "${prod.name}"?\n\nTodas as chaves vinculadas (${prod.stockCount} chaves) e as 4 variantes serão permanentemente removidas do banco de dados.\n\nEsta ação NÃO pode ser desfeita. Confirmar?`;
+    if (!confirm(confirmMessage)) return;
 
     try {
       const res = await fetch(`/api/admin/products/${prod.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao excluir produto.");
 
-      showAdminToast(data.message || "Produto atualizado.");
+      showAdminToast(data.message || `Produto "${prod.name}" excluído definitivamente.`);
       loadAdminData();
     } catch (err: any) {
-      alert(`Falha: ${err.message}`);
+      alert(`Falha ao excluir produto: ${err.message}`);
     }
   };
 
@@ -1545,6 +1607,29 @@ export default function AdminBackofficePage() {
                             <span>+ Chaves</span>
                           </button>
 
+                          {/* Botão Ativar / Desativar */}
+                          <button
+                            onClick={() => handleToggleProductStatus(prod)}
+                            className={`px-3 py-1.5 rounded-xl border font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                              prod.status === "DISABLED"
+                                ? "bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border-emerald-500/40"
+                                : "bg-[#181c1a] hover:bg-[#202623] text-[#86948a] hover:text-white border-white/10"
+                            }`}
+                            title={prod.status === "DISABLED" ? "Reativar produto na vitrine pública" : "Desativar produto da vitrine pública"}
+                          >
+                            {prod.status === "DISABLED" ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Reativar</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3.5 h-3.5 text-[#86948a]" />
+                                <span>Desativar</span>
+                              </>
+                            )}
+                          </button>
+
                           <button
                             onClick={() => handleOpenEditProduct(prod)}
                             className="px-3 py-1.5 rounded-xl bg-[#181c1a] hover:bg-[#202623] text-white border border-white/10 font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -1574,7 +1659,7 @@ export default function AdminBackofficePage() {
                           <button
                             onClick={() => handleDeleteProduct(prod)}
                             className="p-1.5 rounded-xl bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
-                            title="Desativar/Excluir Produto"
+                            title="Excluir produto e todas as suas chaves definitivamente"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -2220,7 +2305,7 @@ export default function AdminBackofficePage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setCouponModalOpen(true)}
+                  onClick={handleOpenNewCoupon}
                   className="px-4 py-2 rounded-xl bg-[#10b981] hover:bg-[#34d399] text-[#050706] text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 shadow-md transition-colors cursor-pointer self-start sm:self-auto"
                 >
                   <Plus className="w-4 h-4" />
@@ -2238,7 +2323,7 @@ export default function AdminBackofficePage() {
                   <Ticket className="w-8 h-8 text-[#10b981] mx-auto opacity-40" />
                   <p>Nenhum cupom cadastrado ainda.</p>
                   <button
-                    onClick={() => setCouponModalOpen(true)}
+                    onClick={handleOpenNewCoupon}
                     className="px-3.5 py-1.5 rounded-xl bg-[#10b981] text-[#050706] font-bold text-xs"
                   >
                     Criar Primeiro Cupom
@@ -2293,6 +2378,14 @@ export default function AdminBackofficePage() {
                             </td>
                             <td className="p-3.5 text-right">
                               <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleOpenEditCoupon(cup)}
+                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#181c1a] hover:bg-[#202623] text-emerald-400 border border-emerald-500/20 flex items-center gap-1 transition-colors cursor-pointer"
+                                  title="Editar cupom"
+                                >
+                                  <Edit className="w-3 h-3 text-emerald-400" />
+                                  <span>Editar</span>
+                                </button>
                                 <button
                                   onClick={() => handleToggleCoupon(cup.id, isCupActive)}
                                   className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer"
@@ -2922,7 +3015,7 @@ export default function AdminBackofficePage() {
                     rows={3}
                     value={prodFormFeatures}
                     onChange={(e) => setProdFormFeatures(e.target.value)}
-                    placeholder="Injeção segura Ring-0 indetectável&#10;Proteção contra memory scans&#10;Autoatendimento de HWID&#10;Suporte VIP no Discord"
+                    placeholder="Injeção segura Ring-0 indetectável&#10;Proteção contra memory scans&#10;Autoatendimento de HWID&#10;Suporte Dedicado no Discord"
                     className="w-full p-2.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
                   />
                   <span className="text-[10px] text-[#86948a] block">
@@ -3095,7 +3188,7 @@ export default function AdminBackofficePage() {
             <div className="flex items-center justify-between pb-3 border-b border-white/8">
               <h3 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
                 <Ticket className="w-4 h-4 text-[#10b981]" />
-                <span>Criar Novo Cupom de Desconto</span>
+                <span>{editingCouponId ? "Editar Cupom de Desconto" : "Criar Novo Cupom de Desconto"}</span>
               </h3>
               <button
                 onClick={() => setCouponModalOpen(false)}
@@ -3184,7 +3277,7 @@ export default function AdminBackofficePage() {
                   className="px-5 py-2.5 rounded-xl font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
                 >
                   {savingCoupon && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Salvar Cupom no PostgreSQL</span>
+                  <span>{editingCouponId ? "Salvar Alterações" : "Salvar Cupom no PostgreSQL"}</span>
                 </button>
               </div>
             </form>

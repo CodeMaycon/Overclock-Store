@@ -39,6 +39,8 @@ export async function GET() {
 
     const formatted = products.map((prod) => ({
       ...prod,
+      tagline: prod.shortDescription,
+      description: prod.fullDescription,
       stockCount: prod._count.licenseKeys,
       variants: prod.variants.map((v) => ({
         ...v,
@@ -128,7 +130,7 @@ export async function POST(req: NextRequest) {
           "Injeção segura Ring-0",
           "Proteção contra memory scans",
           "Autoatendimento de HWID",
-          "Suporte VIP no Discord"
+          "Suporte Especializado 24/7 no Discord"
         ];
 
     // Criação do produto com variantes atreladas em transação

@@ -103,11 +103,8 @@ export class DiscordService {
     }
 
     const rolesToAdd = new Set<string>();
+    // Concede no máximo o Cargo Verificado oficial
     if (this.verifiedRoleId) rolesToAdd.add(this.verifiedRoleId);
-    if (this.customerRoleId) rolesToAdd.add(this.customerRoleId);
-    for (const r of additionalRoleIds) {
-      if (r && r.trim()) rolesToAdd.add(r.trim());
-    }
 
     try {
       // 1. Tenta adicionar usuário na guilda caso tenhamos o accessToken OAuth2

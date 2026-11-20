@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ProductStatus } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/products - Catálogo público de softwares
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const featuredOnly = searchParams.get("featuredOnly") === "true";
+  const featuredParam = searchParams.get("featuredOnly") || searchParams.get("featured");
+  const featuredOnly = featuredParam === "true";
   const category = searchParams.get("category");
   const search = searchParams.get("search");
 

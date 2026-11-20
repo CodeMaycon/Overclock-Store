@@ -248,3 +248,119 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
+// PUT /api/admin/coupons - Edita dados completos de um cupom existente
+export async function PUT(req: NextRequest) {
+  const auth = await requireAdminSession();
+  if (!auth.authorized) return auth.response!;
+
+  try {
+    const body = await req.json();
+    const id = body.id;
+
+    if (!id) {
+      return NextResponse.json({ error: "ID do cupom é obrigatório para edição." }, { status: 400 });
+    }
+
+    const existing = await prisma.coupon.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Cupom não encontrado." }, { status: 404 });
+    }
+
+    const rawCode = body.code || existing.code;
+    const cleanCode = String(rawCode).trim().toUpperCase();
+
+    // Se o código mudou, checa se já existe outro com esse código
+    if (cleanCode !== existing.code) {
+      const duplicate = await prisma.coupon.findUnique({
+        where: { code: cleanCode },
+      });
+      if (duplicate && duplicate.id !== id) {
+        return NextResponse.json({ error: `Já existe outro cupom com o código ${cleanCode}.` }, { status: 400 });
+      }
+    }
+
+    let discountType: DiscountType = existing.discountType;
+    if (body.discountType) {
+      discountType = String(body.discountType).toUpperCase() === "FIXED" ? DiscountType.FIXED : DiscountType.PERCENTAGE;
+    }
+
+    let parsedValue = existing.discountValue;
+    if (body.discountValue !== undefined && body.discountValue !== null && body.discountValue !== "") {
+      parsedValue = Math.round(Number(body.discountValue));
+    } else if (body.discountPercent !== undefined && body.discountPercent !== null) {
+      parsedValue = Math.round(Number(body.discountPercent));
+    } else if (body.discountAmountCents !== undefined && body.discountAmountCents !== null) {
+      parsedValue = Math.round(Number(body.discountAmountCents));
+    }
+
+    if (!parsedValue || parsedValue <= 0 || isNaN(parsedValue)) {
+      return NextResponse.json({ error: "Valor do desconto deve ser um número maior que zero." }, { status: 400 });
+    }
+
+    if (discountType === DiscountType.PERCENTAGE && parsedValue > 100) {
+      return NextResponse.json({ error: "Desconto percentual não pode ser maior que 100%." }, { status: 400 });
+    }
+
+    let minOrderCents = existing.minOrderCents || 0;
+    const rawMin = body.minOrderCents ?? body.minOrderValueCents ?? body.minOrderAmountCents;
+    if (rawMin !== undefined && rawMin !== null && rawMin !== "") {
+      minOrderCents = Math.max(0, Math.round(Number(rawMin)) || 0);
+    }
+
+    let maxUses: number | null = existing.maxUses;
+    if (body.maxUses !== undefined) {
+      if (body.maxUses === null || body.maxUses === "" || Number(body.maxUses) === 0) {
+        maxUses = null;
+      } else {
+        const parsedMax = parseInt(String(body.maxUses), 10);
+        if (!isNaN(parsedMax) && parsedMax > 0) {
+          maxUses = parsedMax;
+        }
+      }
+    }
+
+    const isActive = body.isActive !== undefined ? Boolean(body.isActive) : body.active !== undefined ? Boolean(body.active) : existing.isActive;
+
+    const updated = await prisma.coupon.update({
+      where: { id },
+      data: {
+        code: cleanCode,
+        discountType,
+        discountValue: parsedValue,
+        minOrderCents,
+        maxUses,
+        isActive,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: auth.session!.user.id,
+        actorType: ActorType.ADMIN,
+        action: "COUPON_UPDATED",
+        entityType: "Coupon",
+        entityId: id,
+        metadata: { code: updated.code, discountValue: updated.discountValue, isActive: updated.isActive },
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Cupom ${updated.code} atualizado com sucesso!`,
+      coupon: {
+        ...updated,
+        active: updated.isActive,
+        minOrderAmountCents: updated.minOrderCents,
+        discountPercent: updated.discountType === "PERCENTAGE" ? updated.discountValue : null,
+        discountAmountCents: updated.discountType === "FIXED" ? updated.discountValue : null,
+      },
+    });
+  } catch (error: any) {
+    console.error("[ADMIN_COUPON_PUT_ERROR]", error);
+    return NextResponse.json({ error: "Erro ao atualizar cupom." }, { status: 500 });
+  }
+}
+

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
 import { ProductStatus, DurationType } from "@prisma/client";
@@ -58,7 +59,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       name,
       slug,
       category,
+      tagline,
       shortDescription,
+      description,
       fullDescription,
       videoUrl,
       images,
@@ -99,6 +102,18 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           .filter(Boolean)
       : existingProduct.features;
 
+    const finalShortDesc = shortDescription !== undefined 
+      ? shortDescription 
+      : tagline !== undefined 
+      ? tagline 
+      : existingProduct.shortDescription;
+
+    const finalFullDesc = fullDescription !== undefined 
+      ? fullDescription 
+      : description !== undefined 
+      ? description 
+      : existingProduct.fullDescription;
+
     const updated = await prisma.$transaction(async (tx) => {
       const prod = await tx.product.update({
         where: { id: resolved.id },
@@ -106,8 +121,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           name: name ? name.trim() : existingProduct.name,
           slug: slug ? slug.trim().toLowerCase() : existingProduct.slug,
           category: category || existingProduct.category,
-          shortDescription: shortDescription || existingProduct.shortDescription,
-          fullDescription: fullDescription || existingProduct.fullDescription,
+          shortDescription: finalShortDesc,
+          fullDescription: finalFullDesc,
           videoUrl: videoUrl !== undefined ? (videoUrl ? videoUrl.trim() : null) : existingProduct.videoUrl,
           images: imagesArray,
           specifications: specifications !== undefined ? specifications : (existingProduct.specifications || {
@@ -155,6 +170,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return prod;
     });
 
+    try {
+      revalidatePath("/");
+      revalidatePath("/products");
+    } catch (_) {}
+
     return NextResponse.json({
       success: true,
       message: "Produto atualizado com sucesso!",
@@ -166,7 +186,54 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-// DELETE /api/admin/products/[id]
+// PATCH /api/admin/products/[id] - Ativar / Desativar status do produto
+export async function PATCH(req: NextRequest, { params }: RouteParams) {
+  const auth = await requireAdminSession();
+  if (!auth.authorized) return auth.response!;
+
+  const resolved = await params;
+
+  try {
+    const body = await req.json().catch(() => ({}));
+    const existing = await prisma.product.findUnique({
+      where: { id: resolved.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Produto não encontrado." }, { status: 404 });
+    }
+
+    let newStatus: ProductStatus;
+    if (body.status && Object.values(ProductStatus).includes(body.status)) {
+      newStatus = body.status as ProductStatus;
+    } else {
+      // Toggle automático entre ONLINE e DISABLED
+      newStatus = existing.status === ProductStatus.DISABLED ? ProductStatus.ONLINE : ProductStatus.DISABLED;
+    }
+
+    const updated = await prisma.product.update({
+      where: { id: resolved.id },
+      data: { status: newStatus },
+    });
+
+    try {
+      revalidatePath("/");
+      revalidatePath("/products");
+    } catch (_) {}
+
+    return NextResponse.json({
+      success: true,
+      message: `Status do produto alterado para ${newStatus}.`,
+      status: newStatus,
+      product: updated,
+    });
+  } catch (error: any) {
+    console.error("[ADMIN_TOGGLE_PRODUCT_STATUS_ERROR]", error);
+    return NextResponse.json({ error: "Erro ao alterar status do produto." }, { status: 500 });
+  }
+}
+
+// DELETE /api/admin/products/[id] - Exclusão definitiva ou segura com limpeza de chaves/variantes
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const auth = await requireAdminSession();
   if (!auth.authorized) return auth.response!;
@@ -174,37 +241,83 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   const resolved = await params;
 
   try {
-    // Para segurança e integridade referencial, se o produto tem chaves ou pedidos vinculados, apenas marcamos como DISABLED
-    const keysCount = await prisma.licenseKey.count({
-      where: { productId: resolved.id },
+    const existing = await prisma.product.findUnique({
+      where: { id: resolved.id },
+      include: {
+        _count: {
+          select: {
+            licenseKeys: true,
+            orderItems: true,
+            variants: true,
+          },
+        },
+      },
     });
 
-    const ordersCount = await prisma.orderItem.count({
-      where: { productId: resolved.id },
-    });
-
-    if (keysCount > 0 || ordersCount > 0) {
-      await prisma.product.update({
-        where: { id: resolved.id },
-        data: { status: ProductStatus.DISABLED },
-      });
-      return NextResponse.json({
-        success: true,
-        message: "Produto desativado da loja (possui histórico de vendas/chaves vinculadas).",
-      });
+    if (!existing) {
+      return NextResponse.json({ error: "Produto não encontrado." }, { status: 404 });
     }
 
-    // Se for produto virgem sem histórico, pode deletar fisicamente
-    await prisma.product.delete({
-      where: { id: resolved.id },
-    });
+    // Exclusão atômica com limpeza em cascata de todas as relações dependentes
+    await prisma.$transaction(async (tx) => {
+      // 1. Deletar solicitações de reset HWID associadas às chaves deste produto
+      const keys = await tx.licenseKey.findMany({
+        where: { productId: resolved.id },
+        select: { id: true },
+      });
+      const keyIds = keys.map((k) => k.id);
+      if (keyIds.length > 0) {
+        await tx.hWIDResetRequest.deleteMany({
+          where: { licenseKeyId: { in: keyIds } },
+        });
+      }
+
+      // 2. Deletar todas as chaves de licença vinculadas ao produto
+      await tx.licenseKey.deleteMany({
+        where: { productId: resolved.id },
+      });
+
+      // 3. Deletar avaliações (reviews) e changelogs
+      await tx.review.deleteMany({
+        where: { productId: resolved.id },
+      });
+      await tx.changelog.deleteMany({
+        where: { productId: resolved.id },
+      });
+
+      // 4. Desvincular do StatusService se houver
+      await tx.statusService.updateMany({
+        where: { productId: resolved.id },
+        data: { productId: null },
+      });
+
+      // 5. Deletar itens de pedidos associados para preservar integridade referencial
+      await tx.orderItem.deleteMany({
+        where: { productId: resolved.id },
+      });
+
+      // 6. Deletar variantes do produto
+      await tx.productVariant.deleteMany({
+        where: { productId: resolved.id },
+      });
+
+      // 7. Por fim, deletar o produto
+      await tx.product.delete({
+        where: { id: resolved.id },
+      });
+    }, { timeout: 15000 });
+
+    try {
+      revalidatePath("/");
+      revalidatePath("/products");
+    } catch (_) {}
 
     return NextResponse.json({
       success: true,
-      message: "Produto excluído definitivamente do banco de dados.",
+      message: `Produto "${existing.name}" e todas as suas chaves/variantes foram excluídos definitivamente com sucesso.`,
     });
   } catch (error: any) {
     console.error("[ADMIN_DELETE_PRODUCT_ERROR]", error);
-    return NextResponse.json({ error: "Erro ao excluir produto." }, { status: 500 });
+    return NextResponse.json({ error: `Erro ao excluir produto: ${error.message || "Falha no banco de dados."}` }, { status: 500 });
   }
 }

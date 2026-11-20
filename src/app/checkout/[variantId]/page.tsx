@@ -744,8 +744,11 @@ function CheckoutContent({ params }: CheckoutPageProps) {
                 <input
                   type="text"
                   value={couponCodeInput}
-                  onChange={(e) => setCouponCodeInput(e.target.value)}
-                  placeholder="Ex: OVERCLOCK15"
+                  onChange={(e) => {
+                    setCouponCodeInput(e.target.value);
+                    if (couponError) setCouponError(null);
+                  }}
+                  placeholder="DIGITE SEU CUPOM"
                   className="flex-1 px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs uppercase focus:outline-none focus:border-[#10b981]"
                 />
                 <button
@@ -759,9 +762,10 @@ function CheckoutContent({ params }: CheckoutPageProps) {
               </form>
 
               {couponError && (
-                <span className="text-[11px] text-rose-400 block font-mono">
-                  {couponError}
-                </span>
+                <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center gap-2 text-rose-300 text-[11px] font-mono animate-fadeIn">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                  <span>{couponError}</span>
+                </div>
               )}
             </div>
 

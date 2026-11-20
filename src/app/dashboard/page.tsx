@@ -175,7 +175,7 @@ export default function CustomerDashboardPage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("discord_success") === "linked") {
-        showToast("Conta Discord vinculada com sucesso! Cargos VIP atribuídos.");
+        showToast("Conta Discord vinculada com sucesso! Cargo Verificado atribuído.");
         window.history.replaceState({}, "", "/dashboard");
       } else if (params.get("discord_error") === "already_linked_to_another_account") {
         showToast("Esta conta do Discord já está vinculada a outro usuário da Overclock Store.");
@@ -418,7 +418,7 @@ export default function CustomerDashboardPage() {
                   <h4 className="font-['Space_Grotesk'] text-sm font-bold text-white flex items-center gap-2">
                     <span>Vincular Conta Discord Oficial</span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#5865F2]/20 text-[#7983F5] font-bold">
-                      CARGO VIP AUTOMÁTICO
+                      CARGO VERIFICADO AUTOMÁTICO
                     </span>
                   </h4>
                   <p className="text-xs text-[#86948a] font-['Geist']">
@@ -613,13 +613,16 @@ export default function CustomerDashboardPage() {
                               <span>Resetar HWID</span>
                             </button>
 
-                            <button
-                              onClick={() => setActiveTab("downloads")}
-                              className="px-4 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] shadow-[0_0_16px_rgba(16,185,129,0.3)] transition-all flex items-center gap-1.5 cursor-pointer"
+                            <a
+                              href="https://discord.gg/gqMDjvaSC"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-4 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all flex items-center gap-1.5"
+                              title="Suporte e instruções de ativação no Discord Oficial"
                             >
-                              <Download className="w-3.5 h-3.5" />
-                              <span>Baixar Loader</span>
-                            </button>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#10b981]" />
+                              <span>Instruções &amp; Suporte</span>
+                            </a>
                           </div>
 
                         </div>
@@ -640,33 +643,30 @@ export default function CustomerDashboardPage() {
                   Central de Downloads &amp; Binários Criptografados
                 </h2>
                 <p className="text-xs text-[#bbcabf]">
-                  Downloads protegidos com hash de integridade SHA-256 e injeção em Ring-0.
+                  Distribuição e verificação de arquivos executáveis oficiais.
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-[#0b0f0d] p-6 border border-white/8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-[#10b981]/10 border border-[#10b981]/20 flex items-center justify-center text-[#10b981] shrink-0">
-                    <Download className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-['Space_Grotesk'] text-sm font-bold text-white">
-                      Overclock Universal Loader (v2025.2.1)
-                    </h3>
-                    <p className="text-xs text-[#86948a] font-mono mt-0.5">
-                      14.8 MB • SHA-256: 9e107d...023e1 • Kernel Shield Ativo
-                    </p>
-                  </div>
+              <div className="rounded-2xl bg-[#0b0f0d] p-8 border border-white/8 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-[#10b981]/10 border border-[#10b981]/25 flex items-center justify-center text-[#10b981]">
+                  <Download className="w-7 h-7 opacity-75" />
                 </div>
-
+                <div className="max-w-md space-y-1">
+                  <h3 className="font-['Space_Grotesk'] text-base font-bold text-white">
+                    Nenhum Loader Disponível para Download
+                  </h3>
+                  <p className="text-xs text-[#86948a] font-sans leading-relaxed">
+                    No momento não há arquivos executáveis disponíveis para download direto. Novos binários e atualizações de injeção são anunciados e distribuídos diretamente nos canais oficiais de comunicação.
+                  </p>
+                </div>
                 <a
-                  href="/downloads/Overclock-Loader.exe"
-                  download
-                  onClick={() => showToast("Iniciando download do Loader...")}
-                  className="px-5 py-2.5 rounded-xl bg-[#10b981] hover:bg-[#34d399] text-[#050706] font-['Space_Grotesk'] font-bold text-xs flex items-center gap-2 shadow-md shrink-0 cursor-pointer"
+                  href="https://discord.gg/gqMDjvaSC"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>Baixar Executável</span>
+                  <ExternalLink className="w-4 h-4 text-[#10b981]" />
+                  <span>Acompanhar Comunicados no Discord</span>
                 </a>
               </div>
             </div>
@@ -799,7 +799,7 @@ export default function CustomerDashboardPage() {
                       <span>Vínculo com Discord (1:1)</span>
                     </h3>
                     <p className="text-xs text-[#86948a] font-['Geist'] mt-0.5">
-                      Sincronização de cargos VIP e acesso aos canais privados da comunidade Overclock.
+                      Sincronização de Cargo Verificado e acesso aos canais oficiais da comunidade Overclock.
                     </p>
                   </div>
                   {clientProfile?.discordId ? (
@@ -848,7 +848,7 @@ export default function CustomerDashboardPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#050706] border border-white/5">
                     <div>
                       <p className="text-xs text-[#bbcabf] font-['Geist'] leading-relaxed">
-                        Nenhuma conta Discord vinculada à sua licença. Conecte sua conta para receber cargos VIP nos servidores oficiais e suporte prioritário.
+                        Nenhuma conta Discord vinculada à sua licença. Conecte sua conta para receber o cargo de Verificado nos servidores oficiais e suporte ágil.
                       </p>
                       <p className="text-[11px] text-[#86948a] font-mono mt-1">
                         * Regra 1:1 estrita: Uma conta Discord só pode ser vinculada a uma conta Overclock Store.

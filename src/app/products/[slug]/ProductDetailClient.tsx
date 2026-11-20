@@ -14,7 +14,8 @@ import {
   Check,
   Terminal,
   Lock,
-  Play
+  Play,
+  AlertCircle
 } from "lucide-react";
 import { MOCK_CHANGELOGS } from "@/lib/mock-data";
 
@@ -66,7 +67,10 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
   );
   const [activeTab, setActiveTab] = useState<"overview" | "requirements" | "changelogs">("overview");
   const [couponCode, setCouponCode] = useState("");
-  const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
+  const [couponDiscountCents, setCouponDiscountCents] = useState<number | null>(null);
+  const [couponSuccessMessage, setCouponSuccessMessage] = useState<string | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [hashCopied, setHashCopied] = useState(false);
 
   const isDirectVideo = Boolean(
@@ -88,14 +92,46 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
     : MOCK_CHANGELOGS.filter((c) => c.productSlug === product.slug);
 
   const rawPrice = (selectedVariant.priceCents || 2490) / 100;
-  const finalPrice = couponDiscount ? rawPrice * (1 - couponDiscount) : rawPrice;
+  const rawPriceCents = selectedVariant.priceCents || 2490;
+  const finalPriceCents = Math.max(0, rawPriceCents - (couponDiscountCents || 0));
+  const finalPrice = finalPriceCents / 100;
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (couponCode.toUpperCase() === "OVERCLOCK15") {
-      setCouponDiscount(0.15);
-    } else {
-      alert("Cupom inválido. Tente o cupom de teste: OVERCLOCK15");
+    if (!couponCode.trim()) {
+      setCouponError("Digite o código do cupom.");
+      return;
+    }
+
+    setValidatingCoupon(true);
+    setCouponError(null);
+    setCouponSuccessMessage(null);
+
+    try {
+      const res = await fetch("/api/checkout/validate-coupon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: couponCode.trim(),
+          orderAmountCents: selectedVariant.priceCents || 2490,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.valid) {
+        setCouponError(data.error || "Cupom inválido ou expirado.");
+        setCouponDiscountCents(null);
+        setCouponSuccessMessage(null);
+      } else {
+        setCouponDiscountCents(data.discountCents || 0);
+        setCouponSuccessMessage(`Cupom ${data.coupon.code} aplicado com sucesso!`);
+        setCouponError(null);
+      }
+    } catch (err) {
+      setCouponError("Erro de conexão ao validar cupom.");
+      setCouponDiscountCents(null);
+    } finally {
+      setValidatingCoupon(false);
     }
   };
 
@@ -531,29 +567,45 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
             </div>
 
             {/* Cupom de Desconto */}
-            <form onSubmit={handleApplyCoupon} className="space-y-1.5">
+            <form onSubmit={handleApplyCoupon} className="space-y-2">
               <label className="text-xs text-[#86948a] font-['Geist'] block">
-                Possui código promocional ou cupom?
+                Possui cupom de desconto?
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  placeholder="Ex: OVERCLOCK15"
+                  onChange={(e) => {
+                    setCouponCode(e.target.value);
+                    if (couponError) setCouponError(null);
+                  }}
+                  placeholder="DIGITE SEU CUPOM"
                   className="flex-1 px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-xs font-mono uppercase text-white placeholder-[#86948a] focus:outline-none focus:border-[#10b981]"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
+                  disabled={validatingCoupon}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#10b981]/15 hover:bg-[#10b981]/25 text-[#10b981] border border-[#10b981]/30 transition-colors disabled:opacity-60 cursor-pointer"
                 >
-                  Aplicar
+                  {validatingCoupon ? "Validando..." : "Aplicar"}
                 </button>
               </div>
-              {couponDiscount && (
-                <span className="text-[10px] font-mono text-[#10b981] block">
-                  ✓ 15% de desconto ativado
-                </span>
+
+              {couponError && (
+                <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 flex items-center gap-2 text-rose-300 text-[11px] font-mono animate-fadeIn">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                  <span>{couponError}</span>
+                </div>
+              )}
+
+              {couponSuccessMessage && (
+                <div className="p-2 rounded-lg bg-[#10b981]/10 border border-[#10b981]/25 flex items-center justify-between text-[#10b981] text-[11px] font-mono animate-fadeIn">
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{couponSuccessMessage}</span>
+                  </div>
+                  <span className="font-bold">- R$ {((couponDiscountCents || 0) / 100).toFixed(2).replace(".", ",")}</span>
+                </div>
               )}
             </form>
 

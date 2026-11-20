@@ -141,7 +141,7 @@ function LoginForm() {
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full h-11 pl-11 pr-4 bg-transparent font-mono-data text-xs text-on-surface placeholder:text-outline focus:outline-none"
-                    placeholder="admin ou seu_email@exemplo.com"
+                    placeholder="seu_email@exemplo.com"
                   />
                 </div>
               </div>
@@ -153,15 +153,13 @@ function LoginForm() {
                     <span>Senha</span>
                     <span className="text-primary">*</span>
                   </label>
-                  <a 
-                    href="https://discord.gg/gqMDjvaSC" 
-                    target="_blank" 
-                    rel="noreferrer" 
+                  <Link 
+                    href="/forgot-password"
                     className="font-label-sm text-[11px] text-primary hover:underline"
-                    title="Recuperação de conta via ticket no Discord Oficial"
+                    title="Recuperar senha por e-mail"
                   >
                     Esqueceu a senha?
-                  </a>
+                  </Link>
                 </div>
                 <div className="relative flex items-center bg-surface-container-low rounded-lg border border-white/5 focus-within:border-primary/50 transition-all">
                   <div className="absolute left-3.5 text-outline pointer-events-none flex items-center">
