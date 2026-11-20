@@ -9,12 +9,21 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
+  const errorParam = searchParams.get("error");
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState(() => {
+    if (errorParam === "BannedAccount" || errorParam?.toLowerCase().includes("banned")) {
+      return "Esta conta foi suspensa por violação dos termos de uso e segurança.";
+    }
+    if (errorParam === "CredentialsSignin") {
+      return "Credenciais inválidas. Verifique seu usuário e senha.";
+    }
+    return errorParam || "";
+  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +38,12 @@ function LoginForm() {
       });
 
       if (!result || result.error) {
-        setErrorMessage(result?.error || "Credenciais inválidas. Verifique seu usuário e senha.");
+        const err = result?.error;
+        if (err?.includes("suspensa") || err === "BannedAccount" || err?.includes("banned")) {
+          setErrorMessage("Esta conta foi suspensa por violação dos termos de uso e segurança.");
+        } else {
+          setErrorMessage(err || "Credenciais inválidas. Verifique seu usuário e senha.");
+        }
         setIsLoading(false);
         return;
       }

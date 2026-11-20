@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
-import { ProductStatus, DurationType } from "@prisma/client";
+import { ProductStatus, DurationType, ActorType, ServiceHealthStatus } from "@prisma/client";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -151,14 +151,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         });
       }
 
-      // Atualiza preços das variantes se fornecido
+      // Atualiza preços das variantes se fornecido (mesmo sem ID explícito do formulário)
       if (Array.isArray(variants) && variants.length > 0) {
-        for (const v of variants) {
-          if (v.id) {
+        for (let idx = 0; idx < variants.length; idx++) {
+          const v = variants[idx];
+          const matchedVariant = v.id
+            ? existingProduct.variants.find((ev) => ev.id === v.id)
+            : existingProduct.variants[idx] || existingProduct.variants.find((ev) => ev.durationValue === v.durationHours);
+
+          if (matchedVariant) {
             await tx.productVariant.update({
-              where: { id: v.id },
+              where: { id: matchedVariant.id },
               data: {
-                name: v.name,
+                name: v.name || matchedVariant.name,
                 priceCents: Math.round(Number(v.priceCents)),
                 compareAtPriceCents: v.compareAtPriceCents ? Math.round(Number(v.compareAtPriceCents)) : null,
               },
@@ -166,6 +171,39 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           }
         }
       }
+
+      // Sincroniza StatusService se o status do produto for alterado
+      if (status) {
+        const serviceStatus =
+          status === "MAINTENANCE"
+            ? ServiceHealthStatus.MAINTENANCE
+            : status === "ONLINE"
+            ? ServiceHealthStatus.OPERATIONAL
+            : ServiceHealthStatus.DEGRADED;
+
+        await tx.statusService.updateMany({
+          where: {
+            OR: [{ productId: resolved.id }, { slug: prod.slug }],
+          },
+          data: { status: serviceStatus },
+        });
+      }
+
+      // Auditoria
+      await tx.auditLog.create({
+        data: {
+          userId: auth.session!.user.id,
+          actorType: ActorType.ADMIN,
+          action: "PRODUCT_UPDATED",
+          entityType: "Product",
+          entityId: resolved.id,
+          metadata: {
+            productName: prod.name,
+            status: prod.status,
+            variantsUpdated: variants?.length || 0,
+          },
+        },
+      });
 
       return prod;
     });

@@ -41,6 +41,26 @@ export async function PATCH(req: NextRequest) {
       data: { status },
     });
 
+    // Sincroniza status do Produto vinculado ou por slug
+    const prodStatus =
+      status === "MAINTENANCE"
+        ? "MAINTENANCE"
+        : status === "OPERATIONAL"
+        ? "ONLINE"
+        : "TESTING";
+
+    if (updated.productId) {
+      await prisma.product.update({
+        where: { id: updated.productId },
+        data: { status: prodStatus as any },
+      });
+    } else {
+      await prisma.product.updateMany({
+        where: { slug: updated.slug },
+        data: { status: prodStatus as any },
+      });
+    }
+
     // Registra na auditoria
     await prisma.auditLog.create({
       data: {
@@ -53,6 +73,7 @@ export async function PATCH(req: NextRequest) {
           serviceId: updated.id,
           name: updated.name,
           newStatus: status,
+          productStatusApplied: prodStatus,
         },
       },
     });
@@ -60,7 +81,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({
       success: true,
       service: updated,
-      message: `Status de ${updated.name} alterado para ${status}.`,
+      message: `Status de ${updated.name} alterado para ${status} e sincronizado com o catálogo.`,
     });
   } catch (error: any) {
     console.error("Erro ao atualizar status service:", error);

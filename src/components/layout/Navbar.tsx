@@ -38,8 +38,8 @@ export function Navbar() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 px-4 lg:px-12 transition-all duration-300 ${
         isScrolled
-          ? "bg-gradient-to-b from-[#050706]/85 via-[#050706]/55 to-transparent backdrop-blur-sm py-2"
-          : "bg-transparent border-transparent py-2.5"
+          ? "bg-[#050706]/90 backdrop-blur-md border-b border-white/[0.08] py-2 shadow-lg shadow-black/20"
+          : "bg-transparent border-b border-transparent py-2.5"
       }`}
     >
       <div className="h-16 max-w-7xl mx-auto flex items-center justify-between gap-4">
@@ -49,13 +49,13 @@ export function Navbar() {
           <img
             src="/logo.png"
             alt="OVERCLOCK STORE"
-            className="h-9 sm:h-11 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+            className="h-11 sm:h-14 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
           />
         </Link>
 
         {/* Central Floating Pill Navbar (Exact Stitch Spec) */}
         <div className="hidden md:flex items-center justify-center">
-          <nav className="flex items-center gap-1 px-2 py-1 rounded-full bg-surface-container/80 backdrop-blur-xl border border-white/5 shadow-2xl">
+          <nav className="flex items-center gap-1 px-2 py-1 rounded-full bg-surface-container/70 backdrop-blur-xl border border-white/10">
             {navLinks.map((link) => {
               const isActive = pathname === link.href;
               return (

@@ -91,17 +91,25 @@ export async function GET() {
       createdAt: s.createdAt,
     }));
 
+    const kpisData = {
+      totalRevenueCents,
+      totalRevenueFormatted: `R$ ${(totalRevenueCents / 100).toFixed(2).replace(".", ",")}`,
+      completedOrders: completedOrdersCount,
+      completedOrdersCount,
+      pendingOrders: pendingOrdersCount,
+      pendingOrdersCount,
+      totalUsers: totalUsersCount,
+      totalUsersCount,
+      resellerCount,
+      totalResellers: resellerCount,
+    };
+
     return NextResponse.json({
       success: true,
-      metrics: {
-        totalRevenueCents,
-        totalRevenueFormatted: `R$ ${(totalRevenueCents / 100).toFixed(2).replace(".", ",")}`,
-        completedOrdersCount,
-        pendingOrdersCount,
-        totalUsersCount,
-        resellerCount,
-      },
+      kpis: kpisData,
+      metrics: kpisData,
       lowStockAlerts,
+      recentOrders: formattedSales,
       recentSales: formattedSales,
     });
   } catch (error: any) {

@@ -42,7 +42,9 @@ import {
   Check,
   Ban,
   AlertCircle,
-  EyeOff
+  EyeOff,
+  Gift,
+  Copy
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/lib/auth-context";
@@ -362,6 +364,137 @@ export default function AdminBackofficePage() {
   const showAdminToast = (msg: string) => {
     setAdminNotice(msg);
     setTimeout(() => setAdminNotice(null), 4000);
+  };
+
+  // Sub-aba de Produtos: Catálogo ou Gestão de Chaves
+  const [productSubTab, setProductSubTab] = useState<"catalog" | "keys">("catalog");
+  const [keysList, setKeysList] = useState<any[]>([]);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+  const [keyProductFilter, setKeyProductFilter] = useState("");
+  const [keyStatusFilter, setKeyStatusFilter] = useState("");
+  const [keySearch, setKeySearch] = useState("");
+
+  // Estados de Atribuição Gratuita (Sorteios / Brindes)
+  const [grantFreeModalOpen, setGrantFreeModalOpen] = useState(false);
+  const [grantFreeUserId, setGrantFreeUserId] = useState("");
+  const [grantFreeProductId, setGrantFreeProductId] = useState("");
+  const [grantFreeVariantId, setGrantFreeVariantId] = useState("");
+  const [grantFreeReason, setGrantFreeReason] = useState("Sorteio / Brinde da Comunidade");
+  const [grantingFreeLicense, setGrantingFreeLicense] = useState(false);
+
+  // Estados de Detalhes do Cliente
+  const [customerDetailsModalOpen, setCustomerDetailsModalOpen] = useState(false);
+  const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<any | null>(null);
+  const [loadingCustomerDetails, setLoadingCustomerDetails] = useState(false);
+
+  // Carregar lista de chaves com filtros
+  const loadKeys = useCallback(async () => {
+    setLoadingKeys(true);
+    try {
+      const params = new URLSearchParams();
+      if (keyProductFilter) params.append("productId", keyProductFilter);
+      if (keyStatusFilter) params.append("status", keyStatusFilter);
+      params.append("limit", "100");
+      const res = await fetch(`/api/admin/licenses?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setKeysList(data.keys || []);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar chaves:", err);
+    } finally {
+      setLoadingKeys(false);
+    }
+  }, [keyProductFilter, keyStatusFilter]);
+
+  // Excluir chave do estoque
+  const handleDeleteKey = async (keyId: string) => {
+    if (!confirm("Tem certeza que deseja remover esta chave do estoque?")) return;
+    try {
+      const res = await fetch("/api/admin/licenses", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao remover chave.");
+      showAdminToast(data.message || "Chave removida com sucesso!");
+      loadKeys();
+      loadAdminData();
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    }
+  };
+
+  // Abrir modal de atribuição gratuita
+  const handleOpenGrantFree = (userId?: string) => {
+    if (userId) {
+      setGrantFreeUserId(userId);
+    } else if (usersList.length > 0) {
+      setGrantFreeUserId(usersList[0].id);
+    }
+
+    if (products.length > 0) {
+      setGrantFreeProductId(products[0].id);
+      if (products[0].variants?.length > 0) {
+        setGrantFreeVariantId(products[0].variants[0].id);
+      }
+    }
+    setGrantFreeReason("Sorteio / Brinde da Comunidade");
+    setGrantFreeModalOpen(true);
+  };
+
+  // Conceder licença gratuita via API
+  const handleGrantFreeLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!grantFreeUserId || !grantFreeProductId) {
+      alert("Selecione o cliente e o produto.");
+      return;
+    }
+    setGrantingFreeLicense(true);
+    try {
+      const res = await fetch("/api/admin/licenses/grant-free", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: grantFreeUserId,
+          productId: grantFreeProductId,
+          variantId: grantFreeVariantId || undefined,
+          reason: grantFreeReason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao atribuir licença.");
+      showAdminToast(data.message || "Licença atribuída com sucesso!");
+      setGrantFreeModalOpen(false);
+      loadKeys();
+      loadAdminData();
+      loadUsers();
+      if (selectedCustomerDetails?.id === grantFreeUserId) {
+        loadCustomerDetails(grantFreeUserId);
+      }
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setGrantingFreeLicense(false);
+    }
+  };
+
+  // Abrir e carregar detalhes do cliente
+  const loadCustomerDetails = async (userId: string) => {
+    setLoadingCustomerDetails(true);
+    setCustomerDetailsModalOpen(true);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedCustomerDetails(data.user);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar detalhes do cliente:", err);
+    } finally {
+      setLoadingCustomerDetails(false);
+    }
   };
 
   // Carregar histórico de vendas reais do PostgreSQL
@@ -772,6 +905,12 @@ export default function AdminBackofficePage() {
     if (activeAdminTab === "audit") loadAuditLogs();
   }, [activeAdminTab, loadOverview, loadUsers, loadBlacklist, loadHwidRequests, loadStatusServices, loadCoupons, loadAuditLogs]);
 
+  useEffect(() => {
+    if (activeAdminTab === "products" && productSubTab === "keys") {
+      loadKeys();
+    }
+  }, [activeAdminTab, productSubTab, loadKeys]);
+
   // Atualizar variante selecionada quando muda o produto na importação
   useEffect(() => {
     if (selectedProductForImport) {
@@ -862,26 +1001,36 @@ export default function AdminBackofficePage() {
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const editingProd = products.find((p) => p.id === editingProductId);
+      const findVariantId = (durHours: number, isLife: boolean) => {
+        if (!editingProd) return undefined;
+        return editingProd.variants.find((v) => isLife ? v.isLifetime : v.durationHours === durHours)?.id;
+      };
+
       const variantsPayload = [
         {
+          id: findVariantId(24, false),
           name: "Passe Diário (24h)",
           durationHours: 24,
           priceCents: parsePriceToCents(prodFormDailyPrice),
           isLifetime: false,
         },
         {
+          id: findVariantId(168, false),
           name: "Acesso Semanal (7 Dias)",
           durationHours: 168,
           priceCents: parsePriceToCents(prodFormWeeklyPrice),
           isLifetime: false,
         },
         {
+          id: findVariantId(720, false),
           name: "Acesso Mensal (30 Dias)",
           durationHours: 720,
           priceCents: parsePriceToCents(prodFormMonthlyPrice),
           isLifetime: false,
         },
         {
+          id: findVariantId(876000, true),
           name: "Licença Vitalícia (Lifetime)",
           durationHours: 876000,
           priceCents: parsePriceToCents(prodFormLifetimePrice),
@@ -1494,15 +1643,52 @@ export default function AdminBackofficePage() {
           {/* TAB 2: PRODUCTS & STOCK */}
           {activeAdminTab === "products" && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/8">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/8">
                 <div>
-                  <h2 className="font-['Space_Grotesk'] text-base font-bold text-white">Catálogo de Produtos &amp; Estoque Real</h2>
-                  <p className="text-xs text-[#86948a]">Gerencie softwares, mídias, cargos do Discord, precificação e chaves atômicas diretamente no PostgreSQL.</p>
+                  <h2 className="font-['Space_Grotesk'] text-base font-bold text-white">Catálogo de Softwares &amp; Gestão de Chaves</h2>
+                  <p className="text-xs text-[#86948a]">Gerencie produtos, precificação, inventário atômico e concessão de licenças para sorteios e promoções.</p>
                 </div>
-                <div className="flex items-center gap-2.5">
+
+                {/* Sub-abas de Navegação */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#0b0f0d] border border-white/8 text-xs font-['Space_Grotesk'] font-bold">
+                  <button
+                    onClick={() => setProductSubTab("catalog")}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      productSubTab === "catalog"
+                        ? "bg-[#10b981] text-[#050706]"
+                        : "text-[#86948a] hover:text-white"
+                    }`}
+                  >
+                    Catálogo ({products.length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      setProductSubTab("keys");
+                      loadKeys();
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      productSubTab === "keys"
+                        ? "bg-[#10b981] text-[#050706]"
+                        : "text-[#86948a] hover:text-white"
+                    }`}
+                  >
+                    Estoque de Chaves ({licenseMetrics.unassigned} disp.)
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleOpenGrantFree()}
+                    className="px-3.5 py-2 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 border border-purple-500/40 text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer shadow-md transition-all"
+                    title="Atribuir licença gratuita para sorteios, brindes ou promoções"
+                  >
+                    <Gift className="w-4 h-4 text-purple-400" />
+                    <span>Atribuir Licença Sem Pagamento</span>
+                  </button>
+
                   <button
                     onClick={handleOpenNewProduct}
-                    className="px-4 py-2.5 rounded-xl bg-[#10b981] hover:bg-[#34d399] text-[#050706] text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 shadow-lg shadow-[#10b981]/20 transition-all hover:scale-[1.02] cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-[#10b981] hover:bg-[#34d399] text-[#050706] text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 shadow-lg shadow-[#10b981]/20 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>+ Novo Produto</span>
@@ -1513,13 +1699,17 @@ export default function AdminBackofficePage() {
                       setImportMode("manual");
                       setImportKeysModalOpen(true);
                     }}
-                    className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10 text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer"
                   >
                     <Upload className="w-4 h-4 text-[#10b981]" />
                     <span>Importar Chaves</span>
                   </button>
                 </div>
               </div>
+
+              {/* SUB-ABA 1: CATÁLOGO */}
+              {productSubTab === "catalog" && (
+                <>
 
               {loadingProducts ? (
                 <div className="py-16 text-center text-[#86948a] font-mono text-xs flex flex-col items-center justify-center gap-2">
@@ -1682,6 +1872,184 @@ export default function AdminBackofficePage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+              </>
+              )}
+
+              {/* SUB-ABA 2: GESTÃO COMPLETA DE CHAVES DO ESTOQUE */}
+              {productSubTab === "keys" && (
+                <div className="space-y-4">
+                  {/* Filtros de Chaves */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-[#0b0f0d] border border-white/8">
+                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                      {/* Filtro por Produto */}
+                      <select
+                        value={keyProductFilter}
+                        onChange={(e) => setKeyProductFilter(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-[#10b981]"
+                      >
+                        <option value="">Todos os Softwares</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+
+                      {/* Filtro por Status */}
+                      <select
+                        value={keyStatusFilter}
+                        onChange={(e) => setKeyStatusFilter(e.target.value)}
+                        className="px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-[#10b981]"
+                      >
+                        <option value="">Todos os Status</option>
+                        <option value="UNASSIGNED">UNASSIGNED (Disponível)</option>
+                        <option value="ACTIVE">ACTIVE (Em Uso)</option>
+                        <option value="FROZEN">FROZEN (Congelada)</option>
+                        <option value="NOT_ACTIVATED">NOT_ACTIVATED (Aguardando Ativação)</option>
+                        <option value="EXPIRED">EXPIRED (Expirada)</option>
+                      </select>
+
+                      <button
+                        onClick={loadKeys}
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white cursor-pointer"
+                        title="Atualizar lista de chaves"
+                      >
+                        <RefreshCw className="w-4 h-4 text-[#10b981]" />
+                      </button>
+                    </div>
+
+                    <div className="relative w-full sm:w-64">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#86948a]" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por código ou cliente..."
+                        value={keySearch}
+                        onChange={(e) => setKeySearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#050706] border border-white/10 text-xs text-white placeholder-[#86948a] focus:outline-none focus:border-[#10b981]"
+                      />
+                    </div>
+                  </div>
+
+                  {loadingKeys ? (
+                    <div className="py-16 text-center text-[#86948a] font-mono text-xs flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#10b981]" />
+                      <span>Consultando chaves no PostgreSQL...</span>
+                    </div>
+                  ) : keysList.length === 0 ? (
+                    <div className="p-8 rounded-2xl bg-[#0b0f0d] border border-white/8 text-center text-[#86948a] font-mono text-xs space-y-3">
+                      <Key className="w-8 h-8 mx-auto text-[#10b981] opacity-40" />
+                      <p>Nenhuma chave encontrada com os filtros aplicados.</p>
+                      <button
+                        onClick={() => {
+                          setImportMode("generate");
+                          setImportKeysModalOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#10b981] text-[#050706] font-bold text-xs cursor-pointer"
+                      >
+                        Gerar Chaves Automáticas
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-[#0b0f0d] border border-white/8 overflow-x-auto">
+                      <table className="w-full text-left text-xs font-mono min-w-[750px]">
+                        <thead className="bg-[#101412] text-[#86948a] uppercase border-b border-white/8">
+                          <tr>
+                            <th className="p-3.5">CÓDIGO DA CHAVE</th>
+                            <th className="p-3.5">SOFTWARE / PLANO</th>
+                            <th className="p-3.5">STATUS</th>
+                            <th className="p-3.5">CLIENTE ALOCADO</th>
+                            <th className="p-3.5">EXPIRAÇÃO</th>
+                            <th className="p-3.5 text-right">AÇÕES</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-white">
+                          {keysList
+                            .filter((k) => {
+                              if (!keySearch) return true;
+                              const s = keySearch.toLowerCase();
+                              return (
+                                k.key.toLowerCase().includes(s) ||
+                                (k.user?.username && k.user.username.toLowerCase().includes(s)) ||
+                                (k.user?.email && k.user.email.toLowerCase().includes(s))
+                              );
+                            })
+                            .map((k) => (
+                              <tr key={k.id} className="hover:bg-white/[0.02]">
+                                <td className="p-3.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-[#10b981] tracking-wider select-all">
+                                      {k.key}
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(k.key);
+                                        showAdminToast(`Chave ${k.key} copiada!`);
+                                      }}
+                                      className="p-1 rounded hover:bg-white/10 text-[#86948a] hover:text-white cursor-pointer"
+                                      title="Copiar chave"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5">
+                                  <div className="flex flex-col">
+                                    <span className="font-sans font-bold text-white">
+                                      {k.product?.name || "Software"}
+                                    </span>
+                                    <span className="text-[10px] text-[#86948a]">
+                                      {k.variant?.name || "Plano Padrão"}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                <td className="p-3.5">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    k.status === "UNASSIGNED"
+                                      ? "bg-[#10b981]/15 text-[#10b981]"
+                                      : k.status === "ACTIVE"
+                                      ? "bg-cyan-500/15 text-cyan-300"
+                                      : k.status === "FROZEN"
+                                      ? "bg-purple-500/15 text-purple-300"
+                                      : k.status === "NOT_ACTIVATED"
+                                      ? "bg-amber-500/15 text-amber-300"
+                                      : "bg-rose-500/15 text-rose-300"
+                                  }`}>
+                                    {k.status}
+                                  </span>
+                                </td>
+
+                                <td className="p-3.5">
+                                  {k.user ? (
+                                    <span className="text-white font-sans text-xs flex items-center gap-1">
+                                      <User className="w-3 h-3 text-[#10b981]" />
+                                      <span>@{k.user.username}</span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-[#86948a] text-[11px]">Disponível no Estoque</span>
+                                  )}
+                                </td>
+
+                                <td className="p-3.5 text-[#86948a] text-[11px]">
+                                  {k.expiresAt ? new Date(k.expiresAt).toLocaleDateString("pt-BR") : "—"}
+                                </td>
+
+                                <td className="p-3.5 text-right">
+                                  <button
+                                    onClick={() => handleDeleteKey(k.id)}
+                                    className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                    title="Remover chave do estoque"
+                                  >
+                                    Remover
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1940,12 +2308,15 @@ export default function AdminBackofficePage() {
                             .map((usr) => (
                               <tr key={usr.id} className="hover:bg-white/[0.02]">
                                 <td className="p-3.5">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 rounded-full bg-[#10b981]/20 text-[#10b981] font-bold text-xs flex items-center justify-center font-mono">
+                                  <div 
+                                    onClick={() => loadCustomerDetails(usr.id)}
+                                    className="flex items-center gap-2.5 cursor-pointer group"
+                                  >
+                                    <div className="w-7 h-7 rounded-full bg-[#10b981]/20 text-[#10b981] font-bold text-xs flex items-center justify-center font-mono group-hover:scale-110 transition-transform">
                                       {usr.username.slice(0, 2).toUpperCase()}
                                     </div>
                                     <div>
-                                      <span className="font-sans font-bold text-white block">
+                                      <span className="font-sans font-bold text-white block group-hover:text-[#10b981] transition-colors">
                                         @{usr.username}
                                       </span>
                                       <span className="text-[11px] text-[#86948a] font-sans">
@@ -1995,18 +2366,36 @@ export default function AdminBackofficePage() {
                                 </td>
 
                                 <td className="p-3.5 text-right">
-                                  {usr.role !== "ADMIN" && (
+                                  <div className="flex items-center justify-end gap-1.5">
                                     <button
-                                      onClick={() => handleToggleBanUser(usr.id, usr.isBanned)}
-                                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-['Space_Grotesk'] transition-colors cursor-pointer ${
-                                        usr.isBanned
-                                          ? "bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30"
-                                          : "bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
-                                      }`}
+                                      onClick={() => loadCustomerDetails(usr.id)}
+                                      className="px-2.5 py-1 rounded-lg text-[10px] font-bold font-['Space_Grotesk'] bg-white/5 hover:bg-white/10 text-white transition-colors cursor-pointer"
+                                      title="Ver compras, licenças e telemetria do cliente"
                                     >
-                                      {usr.isBanned ? "Desbanir" : "Banir"}
+                                      Detalhes
                                     </button>
-                                  )}
+
+                                    <button
+                                      onClick={() => handleOpenGrantFree(usr.id)}
+                                      className="px-2 py-1 rounded-lg text-[10px] font-bold font-['Space_Grotesk'] bg-purple-950/40 hover:bg-purple-900/60 text-purple-300 border border-purple-500/30 transition-colors cursor-pointer"
+                                      title="Conceder licença gratuita para este cliente"
+                                    >
+                                      🎁 Licença
+                                    </button>
+
+                                    {usr.role !== "ADMIN" && (
+                                      <button
+                                        onClick={() => handleToggleBanUser(usr.id, usr.isBanned)}
+                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-['Space_Grotesk'] transition-colors cursor-pointer ${
+                                          usr.isBanned
+                                            ? "bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30"
+                                            : "bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                                        }`}
+                                      >
+                                        {usr.isBanned ? "Desbanir" : "Banir"}
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -3281,6 +3670,353 @@ export default function AdminBackofficePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ATRIBUIR LICENÇA SEM PAGAMENTO (SORTEIO / BRINDE / PROMOÇÃO) */}
+      {grantFreeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-lg rounded-3xl bg-[#0b0f0d] border border-purple-500/30 p-6 sm:p-8 space-y-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 border-b border-white/8">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <Gift className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-['Space_Grotesk'] text-lg font-bold text-white">
+                    Atribuir Licença Sem Pagamento
+                  </h3>
+                  <p className="text-xs text-[#86948a]">
+                    Conceda acesso a software para sorteios, testes de parceiros ou cortesia.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGrantFreeModalOpen(false)}
+                className="text-gray-500 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGrantFreeLicense} className="space-y-4 text-xs font-['Geist']">
+              <div>
+                <label className="text-[#86948a] font-mono block mb-1">CLIENTE DESTINATÁRIO:</label>
+                <select
+                  value={grantFreeUserId}
+                  onChange={(e) => setGrantFreeUserId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+                  required
+                >
+                  <option value="">Selecione um cliente cadastrado...</option>
+                  {usersList.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      @{u.username} — {u.email} ({u.fullName})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[#86948a] font-mono block mb-1">PRODUTO / SOFTWARE:</label>
+                  <select
+                    value={grantFreeProductId}
+                    onChange={(e) => {
+                      setGrantFreeProductId(e.target.value);
+                      const prod = products.find((p) => p.id === e.target.value);
+                      if (prod && prod.variants.length > 0) {
+                        setGrantFreeVariantId(prod.variants[0].id);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+                    required
+                  >
+                    <option value="">Selecione o produto...</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[#86948a] font-mono block mb-1">PLANO / VARIANTE:</label>
+                  <select
+                    value={grantFreeVariantId}
+                    onChange={(e) => setGrantFreeVariantId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+                    required
+                  >
+                    {(() => {
+                      const prod = products.find((p) => p.id === grantFreeProductId);
+                      if (!prod || prod.variants.length === 0) {
+                        return <option value="">Selecione um produto antes</option>;
+                      }
+                      return prod.variants.map((v) => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ));
+                    })()}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[#86948a] font-mono block mb-1">MOTIVO / FINALIDADE (AUDITORIA):</label>
+                <input
+                  type="text"
+                  value={grantFreeReason}
+                  onChange={(e) => setGrantFreeReason(e.target.value)}
+                  placeholder="Ex: Sorteio no Discord oficial / Brinde da comunidade"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+                  required
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/20 text-[#bbcabf] text-[11px] space-y-1">
+                <span className="font-bold text-purple-300 block">Como funciona a concessão gratuita:</span>
+                <p>• Uma chave atômica disponível no estoque será alocada para o cliente com status <strong>NOT_ACTIVATED</strong>.</p>
+                <p>• Um pedido auditado com valor R$ 0,00 será registrado e a licença aparecerá no <strong>/dashboard</strong> do cliente.</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/8">
+                <button
+                  type="button"
+                  onClick={() => setGrantFreeModalOpen(false)}
+                  className="px-4 py-2 text-[#86948a] hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={grantingFreeLicense}
+                  className="px-5 py-2.5 rounded-xl font-bold font-['Space_Grotesk'] bg-purple-600 hover:bg-purple-500 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-600/30"
+                >
+                  {grantingFreeLicense && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Conceder Licença</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: FICHA CADASTRAL DO CLIENTE (HISTÓRICO & LICENÇAS) */}
+      {customerDetailsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-3xl rounded-3xl bg-[#0b0f0d] border border-white/10 p-6 sm:p-8 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-white/8">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#10b981]/20 text-[#10b981] font-bold text-sm flex items-center justify-center font-mono">
+                  {selectedCustomerDetails?.username ? selectedCustomerDetails.username.slice(0, 2).toUpperCase() : "US"}
+                </div>
+                <div>
+                  <h3 className="font-['Space_Grotesk'] text-lg font-bold text-white flex items-center gap-2">
+                    <span>@{selectedCustomerDetails?.username}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      selectedCustomerDetails?.isBanned
+                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                        : "bg-[#10b981]/15 text-[#10b981]"
+                    }`}>
+                      {selectedCustomerDetails?.isBanned ? "BANIDO" : "ATIVO"}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-white">
+                      {selectedCustomerDetails?.role}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#86948a] font-['Geist']">
+                    {selectedCustomerDetails?.fullName} • {selectedCustomerDetails?.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomerDetailsModalOpen(false)}
+                className="text-gray-500 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {loadingCustomerDetails ? (
+              <div className="py-16 text-center text-[#86948a] font-mono text-xs flex flex-col items-center justify-center gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-[#10b981]" />
+                <span>Carregando telemetria e compras do cliente...</span>
+              </div>
+            ) : selectedCustomerDetails ? (
+              <div className="space-y-6 text-xs">
+                {/* 1. Resumo de Cadastro */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
+                  <div className="p-3 rounded-xl bg-[#050706] border border-white/5">
+                    <span className="text-[#86948a] text-[10px] block">DISCORD</span>
+                    <span className="text-white font-bold truncate block">
+                      {selectedCustomerDetails.discordUsername ? `@${selectedCustomerDetails.discordUsername}` : "Não vinculado"}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#050706] border border-white/5">
+                    <span className="text-[#86948a] text-[10px] block">TOTAL DE COMPRAS</span>
+                    <span className="text-[#10b981] font-bold text-sm block">
+                      {selectedCustomerDetails.orders?.length || 0} pedidos
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#050706] border border-white/5">
+                    <span className="text-[#86948a] text-[10px] block">LICENÇAS VINCULADAS</span>
+                    <span className="text-cyan-400 font-bold text-sm block">
+                      {selectedCustomerDetails.licenses?.length || 0} licenças
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[#050706] border border-white/5">
+                    <span className="text-[#86948a] text-[10px] block">CADASTRADO EM</span>
+                    <span className="text-white text-xs block">
+                      {new Date(selectedCustomerDetails.createdAt).toLocaleDateString("pt-BR")}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Licenças Ativas do Cliente */}
+                <div className="space-y-2">
+                  <h4 className="font-['Space_Grotesk'] font-bold text-white text-sm flex items-center justify-between">
+                    <span>Licenças Digitais do Cliente</span>
+                    <span className="text-xs text-[#86948a] font-mono">
+                      {selectedCustomerDetails.licenses?.length || 0} no banco
+                    </span>
+                  </h4>
+
+                  {(!selectedCustomerDetails.licenses || selectedCustomerDetails.licenses.length === 0) ? (
+                    <div className="p-4 rounded-xl bg-[#050706] border border-white/5 text-[#86948a] font-mono text-center">
+                      Nenhuma licença atribuída a este usuário.
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-white/5 overflow-hidden">
+                      <table className="w-full text-left font-mono text-xs">
+                        <thead className="bg-[#050706] text-[#86948a] uppercase">
+                          <tr>
+                            <th className="p-2.5">CHAVE</th>
+                            <th className="p-2.5">SOFTWARE / PLANO</th>
+                            <th className="p-2.5">STATUS</th>
+                            <th className="p-2.5">VALIDADE</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-white">
+                          {selectedCustomerDetails.licenses.map((lic: any) => (
+                            <tr key={lic.id} className="hover:bg-white/[0.02]">
+                              <td className="p-2.5 font-bold text-[#10b981] select-all">
+                                {lic.key}
+                              </td>
+                              <td className="p-2.5 font-sans">
+                                {lic.product?.name} ({lic.variant?.name})
+                              </td>
+                              <td className="p-2.5">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#10b981]/15 text-[#10b981]">
+                                  {lic.status}
+                                </span>
+                              </td>
+                              <td className="p-2.5 text-[#86948a]">
+                                {lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString("pt-BR") : "Não ativada"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Histórico de Pedidos */}
+                <div className="space-y-2">
+                  <h4 className="font-['Space_Grotesk'] font-bold text-white text-sm flex items-center justify-between">
+                    <span>Histórico de Pedidos e Compras</span>
+                    <span className="text-xs text-[#86948a] font-mono">
+                      {selectedCustomerDetails.orders?.length || 0} registros
+                    </span>
+                  </h4>
+
+                  {(!selectedCustomerDetails.orders || selectedCustomerDetails.orders.length === 0) ? (
+                    <div className="p-4 rounded-xl bg-[#050706] border border-white/5 text-[#86948a] font-mono text-center">
+                      Nenhum pedido registrado para este cliente.
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-white/5 overflow-hidden">
+                      <table className="w-full text-left font-mono text-xs">
+                        <thead className="bg-[#050706] text-[#86948a] uppercase">
+                          <tr>
+                            <th className="p-2.5">PEDIDO</th>
+                            <th className="p-2.5">DATA</th>
+                            <th className="p-2.5">PRODUTO</th>
+                            <th className="p-2.5">VALOR</th>
+                            <th className="p-2.5">STATUS</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-white">
+                          {selectedCustomerDetails.orders.map((ord: any) => (
+                            <tr key={ord.id} className="hover:bg-white/[0.02]">
+                              <td className="p-2.5 font-bold text-[#10b981]">
+                                #{ord.orderNumber}
+                              </td>
+                              <td className="p-2.5 text-[#86948a]">
+                                {new Date(ord.createdAt).toLocaleDateString("pt-BR")}
+                              </td>
+                              <td className="p-2.5 font-sans">
+                                {ord.items?.map((i: any) => `${i.product.name} (${i.variant.name})`).join(", ") || "Software"}
+                              </td>
+                              <td className="p-2.5 font-bold text-[#10b981]">
+                                R$ {(ord.totalCents / 100).toFixed(2).replace(".", ",")}
+                              </td>
+                              <td className="p-2.5">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  ord.status === "COMPLETED"
+                                    ? "bg-[#10b981]/15 text-[#10b981]"
+                                    : "bg-amber-500/15 text-amber-300"
+                                }`}>
+                                  {ord.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Ações Rápidas do Cliente */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/8">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleOpenGrantFree(selectedCustomerDetails.id)}
+                      className="px-4 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 border border-purple-500/40 font-bold font-['Space_Grotesk'] text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Gift className="w-4 h-4 text-purple-400" />
+                      <span>Atribuir Licença Sem Pagamento</span>
+                    </button>
+
+                    {selectedCustomerDetails.role !== "ADMIN" && (
+                      <button
+                        onClick={async () => {
+                          await handleToggleBanUser(selectedCustomerDetails.id, selectedCustomerDetails.isBanned);
+                          loadCustomerDetails(selectedCustomerDetails.id);
+                        }}
+                        className={`px-4 py-2 rounded-xl font-bold font-['Space_Grotesk'] text-xs cursor-pointer ${
+                          selectedCustomerDetails.isBanned
+                            ? "bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30"
+                            : "bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                        }`}
+                      >
+                        {selectedCustomerDetails.isBanned ? "Desbanir Conta" : "Banir Usuário"}
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setCustomerDetailsModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-mono text-xs cursor-pointer"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       )}

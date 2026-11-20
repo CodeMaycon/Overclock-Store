@@ -242,17 +242,27 @@ function OrderContent({ params }: OrderPageProps) {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
               {/* QR Code Container */}
               <div className="md:col-span-4 flex flex-col items-center justify-center p-4 rounded-2xl bg-white border border-white/10 shrink-0 mx-auto w-full max-w-[260px]">
-                {order.payment.pixQrCode ? (
-                  <img
-                    src={order.payment.pixQrCode.startsWith("data:") ? order.payment.pixQrCode : `data:image/png;base64,${order.payment.pixQrCode}`}
-                    alt="QR Code Pix"
-                    className="w-48 h-48 object-contain"
-                  />
-                ) : (
-                  <div className="w-48 h-48 flex items-center justify-center font-mono text-xs text-black">
-                    QR CODE PIX
-                  </div>
-                )}
+                {(() => {
+                  const qrSrc = order.payment.pixQrCode
+                    ? (order.payment.pixQrCode.startsWith("data:") || order.payment.pixQrCode.startsWith("http")
+                        ? order.payment.pixQrCode
+                        : `data:image/png;base64,${order.payment.pixQrCode}`)
+                    : order.payment.pixQrCodeText
+                    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(order.payment.pixQrCodeText)}`
+                    : null;
+
+                  return qrSrc ? (
+                    <img
+                      src={qrSrc}
+                      alt="QR Code Pix Mercado Pago"
+                      className="w-48 h-48 object-contain"
+                    />
+                  ) : (
+                    <div className="w-48 h-48 flex items-center justify-center font-mono text-xs text-black">
+                      QR CODE PIX
+                    </div>
+                  );
+                })()}
                 <span className="font-mono text-[10px] text-black font-bold mt-2">Pague pelo App do seu Banco</span>
               </div>
 
@@ -305,27 +315,29 @@ function OrderContent({ params }: OrderPageProps) {
             </div>
           )}
 
-          {/* BOTÃO 1-CLICK SIMULAÇÃO SANDBOX */}
-          <div className="pt-4 border-t border-white/8 flex flex-col sm:flex-row items-center justify-between gap-4 bg-purple-950/20 p-4 rounded-2xl border-purple-500/20">
-            <div>
-              <span className="font-['Space_Grotesk'] text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-purple-400" />
-                Modo Sandbox Ativo (Ambiente de Teste)
-              </span>
-              <span className="text-[11px] text-[#bbcabf] block mt-0.5 font-['Geist']">
-                Aprove o pedido com 1 clique para testar a transição atômica e entrega da chave no banco.
-              </span>
-            </div>
+          {/* BOTÃO 1-CLICK SIMULAÇÃO SANDBOX (Apenas visível em desenvolvimento local se sandbox ativado) */}
+          {process.env.NODE_ENV === "development" && order.payment?.isSandbox && (
+            <div className="pt-4 border-t border-white/8 flex flex-col sm:flex-row items-center justify-between gap-4 bg-purple-950/20 p-4 rounded-2xl border-purple-500/20">
+              <div>
+                <span className="font-['Space_Grotesk'] text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-purple-400" />
+                  Modo Sandbox Ativo (Ambiente de Teste)
+                </span>
+                <span className="text-[11px] text-[#bbcabf] block mt-0.5 font-['Geist']">
+                  Aprove o pedido com 1 clique para testar a transição atômica e entrega da chave no banco.
+                </span>
+              </div>
 
-            <button
-              onClick={handleSimulatePayment}
-              disabled={simulatingPayment}
-              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-['Space_Grotesk'] font-bold text-xs flex items-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer shrink-0"
-            >
-              {simulatingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-              <span>⚡ Simular Aprovação de Pagamento</span>
-            </button>
-          </div>
+              <button
+                onClick={handleSimulatePayment}
+                disabled={simulatingPayment}
+                className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-['Space_Grotesk'] font-bold text-xs flex items-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer shrink-0"
+              >
+                {simulatingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                <span>⚡ Simular Aprovação de Pagamento</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 

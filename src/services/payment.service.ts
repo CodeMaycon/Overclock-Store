@@ -60,24 +60,29 @@ export class PaymentService {
 
           if (res.ok) {
             const data = await res.json();
+            const qrText = data.point_of_interaction?.transaction_data?.qr_code;
+            const qrBase64 = data.point_of_interaction?.transaction_data?.qr_code_base64;
             return {
               gatewayPaymentId: String(data.id),
-              pixQrCode: data.point_of_interaction?.transaction_data?.qr_code_base64,
-              pixQrCodeText: data.point_of_interaction?.transaction_data?.qr_code,
+              pixQrCode: qrBase64 || (qrText ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrText)}` : undefined),
+              pixQrCodeText: qrText,
               pixExpiresAt: data.date_of_expiration ? new Date(data.date_of_expiration) : new Date(Date.now() + 15 * 60 * 1000),
               isSandbox: false,
             };
+          } else {
+            const errBody = await res.text().catch(() => "");
+            console.error("[MERCADOPAGO_API_ERROR_BODY]", res.status, errBody);
           }
         } catch (err) {
           console.error("[MERCADOPAGO_API_ERROR]", err);
         }
       }
 
-      // Sandbox Fallback para Pix
-      const dummyPixPayload = `00020126580014br.gov.bcb.pix0136overclock-sandbox-${input.orderNumber}520400005303986540${(input.amountCents / 100).toFixed(2)}5802BR5915OVERCLOCK STORE6009SAO PAULO62070503***6304ABCD`;
+      // Sandbox Fallback para Pix (quando em ambiente local ou sem credencial externa)
+      const dummyPixPayload = `00020126580014br.gov.bcb.pix0136overclock-pix-${input.orderNumber}520400005303986540${(input.amountCents / 100).toFixed(2)}5802BR5915OVERCLOCK STORE6009SAO PAULO62070503***6304ABCD`;
       return {
         gatewayPaymentId: `SANDBOX-MP-${Date.now()}`,
-        pixQrCode: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='white'/><text x='50%' y='50%' font-size='14' text-anchor='middle' fill='black'>PIX SANDBOX OVERCLOCK</text></svg>",
+        pixQrCode: `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(dummyPixPayload)}`,
         pixQrCodeText: dummyPixPayload,
         pixExpiresAt: new Date(Date.now() + 15 * 60 * 1000),
         isSandbox: true,
