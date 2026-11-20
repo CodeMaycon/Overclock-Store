@@ -284,6 +284,18 @@ function OrderContent({ params }: OrderPageProps) {
                   </div>
                 </div>
 
+                {order.payment?.isSandbox && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-bold">Aviso: Pedido Gerado em Modo Sandbox (Teste)</p>
+                      <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                        Este pedido foi gerado com credenciais de teste locais. O código Pix acima não é uma cobrança registrada no Banco Central e não funcionará em aplicativos bancários reais. Para pagamentos bancários reais, certifique-se de configurar o <strong>MERCADOPAGO_ACCESS_TOKEN</strong> válido no painel da Vercel.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="p-4 rounded-xl bg-[#101412] border border-white/5 space-y-2 text-xs font-['Geist'] text-[#bbcabf]">
                   <p>1. Abra o aplicativo do seu banco e escolha a opção <strong>Pix com QR Code</strong> ou <strong>Pix Copia e Cola</strong>.</p>
                   <p>2. Confirme o pagamento de <strong>R$ {(order.totalCents / 100).toFixed(2).replace(".", ",")}</strong>.</p>

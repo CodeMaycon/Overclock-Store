@@ -35,8 +35,40 @@ export class PaymentService {
 
     // 1. MERCADO PAGO (PIX)
     if (input.gateway === "MERCADOPAGO" || input.method === "PIX") {
-      if (mpToken && !mpToken.startsWith("fake")) {
+      const isConfiguredToken = Boolean(
+        mpToken &&
+        !mpToken.startsWith("fake") &&
+        mpToken !== "APP_USR-..." &&
+        mpToken.length > 25
+      );
+
+      if (isConfiguredToken) {
         try {
+          const payerFirstName = input.customerName.trim().split(" ")[0] || "Cliente";
+          const payerLastName = input.customerName.trim().split(" ").slice(1).join(" ") || "Overclock";
+          const payerEmail = (input.customerEmail && input.customerEmail.includes("@")) 
+            ? input.customerEmail.trim() 
+            : "contato@overclockstore.com.br";
+
+          const mpPayload: Record<string, any> = {
+            transaction_amount: Number((input.amountCents / 100).toFixed(2)),
+            description: `Overclock Store - Pedido #${input.orderNumber}`,
+            payment_method_id: "pix",
+            payer: {
+              email: payerEmail,
+              first_name: payerFirstName,
+              last_name: payerLastName,
+            },
+            external_reference: input.orderId,
+          };
+
+          // notification_url só deve ser enviado se for URL pública e HTTPS (Mercado Pago rejeita localhost)
+          if (input.appUrl && input.appUrl.startsWith("https://") && !input.appUrl.includes("localhost")) {
+            mpPayload.notification_url = `${input.appUrl}/api/webhooks/mercadopago`;
+          }
+
+          console.log(`[MERCADOPAGO_PAYMENT_INIT] Pedido #${input.orderNumber} - Valor: R$ ${mpPayload.transaction_amount} - Payer: ${payerEmail}`);
+
           const res = await fetch("https://api.mercadopago.com/v1/payments", {
             method: "POST",
             headers: {
@@ -44,41 +76,66 @@ export class PaymentService {
               Authorization: `Bearer ${mpToken}`,
               "X-Idempotency-Key": `order-${input.orderId}-${Date.now()}`,
             },
-            body: JSON.stringify({
-              transaction_amount: Number((input.amountCents / 100).toFixed(2)),
-              description: `Overclock Store - Pedido #${input.orderNumber}`,
-              payment_method_id: "pix",
-              payer: {
-                email: input.customerEmail,
-                first_name: input.customerName.split(" ")[0] || "Cliente",
-                last_name: input.customerName.split(" ").slice(1).join(" ") || "Overclock",
-              },
-              external_reference: input.orderId,
-              notification_url: `${input.appUrl}/api/webhooks/mercadopago`,
-            }),
+            body: JSON.stringify(mpPayload),
           });
+
+          console.log(`[MERCADOPAGO_HTTP_STATUS] Pedido #${input.orderNumber} - HTTP Status: ${res.status} ${res.statusText}`);
 
           if (res.ok) {
             const data = await res.json();
             const qrText = data.point_of_interaction?.transaction_data?.qr_code;
-            const qrBase64 = data.point_of_interaction?.transaction_data?.qr_code_base64;
+            const qrBase64Raw = data.point_of_interaction?.transaction_data?.qr_code_base64;
+
+            console.log(
+              `[MERCADOPAGO_SUCCESS] PaymentId: ${data.id} - Status: ${data.status} - QR Text Presente: ${Boolean(qrText)} - QR Base64 Presente: ${Boolean(qrBase64Raw)}`
+            );
+
+            if (!qrText) {
+              console.error("[MERCADOPAGO_MISSING_QR_TEXT] API não retornou transaction_data.qr_code:", JSON.stringify(data.point_of_interaction || {}));
+              throw new Error("A API do Mercado Pago não retornou o código Pix Copia e Cola.");
+            }
+
+            // Formata o QR Code para visualização direta em imagem
+            const formattedQrImage = qrBase64Raw
+              ? (qrBase64Raw.startsWith("data:") ? qrBase64Raw : `data:image/png;base64,${qrBase64Raw}`)
+              : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrText)}`;
+
             return {
               gatewayPaymentId: String(data.id),
-              pixQrCode: qrBase64 || (qrText ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrText)}` : undefined),
+              pixQrCode: formattedQrImage,
               pixQrCodeText: qrText,
               pixExpiresAt: data.date_of_expiration ? new Date(data.date_of_expiration) : new Date(Date.now() + 15 * 60 * 1000),
               isSandbox: false,
             };
           } else {
             const errBody = await res.text().catch(() => "");
-            console.error("[MERCADOPAGO_API_ERROR_BODY]", res.status, errBody);
+            console.error(`[MERCADOPAGO_API_ERROR_BODY] HTTP ${res.status}:`, errBody);
+
+            let parsedError = "";
+            try {
+              const jsonErr = JSON.parse(errBody);
+              parsedError = jsonErr.message || jsonErr.error || (jsonErr.cause && jsonErr.cause[0]?.description) || "";
+            } catch (_) {}
+
+            if (!isDevelopment) {
+              throw new Error(`Falha ao gerar Pix no Mercado Pago (${res.status}): ${parsedError || "Verifique as configurações do gateway."}`);
+            }
           }
-        } catch (err) {
-          console.error("[MERCADOPAGO_API_ERROR]", err);
+        } catch (err: any) {
+          console.error("[MERCADOPAGO_EXCEPTION]", err.message || err);
+          if (!isDevelopment) {
+            throw err;
+          }
+        }
+      } else {
+        console.warn(`[MERCADOPAGO_TOKEN_NOT_CONFIGURED] MERCADOPAGO_ACCESS_TOKEN ausente, inválido ou com valor de exemplo ("APP_USR-...").`);
+        if (!isDevelopment) {
+          throw new Error("MERCADOPAGO_ACCESS_TOKEN não está configurado nas variáveis de ambiente da Vercel. Não é possível gerar um Pix real sem o token do Mercado Pago.");
         }
       }
 
-      // Sandbox Fallback para Pix (quando em ambiente local ou sem credencial externa)
+      // Sandbox Fallback para Pix (exclusivamente em ambiente local de desenvolvimento/testes)
+      console.warn(`[MERCADOPAGO_SANDBOX_FALLBACK] Gerando simulação sandbox local para Pedido #${input.orderNumber}.`);
       const dummyPixPayload = `00020126580014br.gov.bcb.pix0136overclock-pix-${input.orderNumber}520400005303986540${(input.amountCents / 100).toFixed(2)}5802BR5915OVERCLOCK STORE6009SAO PAULO62070503***6304ABCD`;
       return {
         gatewayPaymentId: `SANDBOX-MP-${Date.now()}`,

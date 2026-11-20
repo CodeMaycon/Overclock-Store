@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
 
     console.error("[CHECKOUT_CREATE_ORDER_ERROR]", error);
     return NextResponse.json(
-      { error: "Erro ao processar checkout e reserva de estoque." },
+      { error: error.message || "Erro ao processar checkout e reserva de estoque." },
       { status: 500 }
     );
   }
