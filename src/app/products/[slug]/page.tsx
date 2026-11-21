@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { releaseExpiredReservations } from "@/lib/reservation";
 import ProductDetailClient from "./ProductDetailClient";
 
 interface ProductPageProps {
@@ -8,6 +9,9 @@ interface ProductPageProps {
 
 export default async function ProductDetailPage({ params }: ProductPageProps) {
   const { slug } = await params;
+
+  // 1. Libera reservas expiradas antes de carregar produto e estoque
+  await releaseExpiredReservations();
 
   let prod = await prisma.product.findUnique({
     where: { slug },
@@ -142,15 +146,21 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
     currentVersion: prod.currentVersion || "v1.0.0",
     isFeatured: prod.isFeatured,
     stockCount: prod._count.licenseKeys,
-    variants: prod.variants.map((v) => ({
-      id: v.id,
-      name: v.name,
-      durationValue: v.durationValue,
-      durationType: v.durationType,
-      priceCents: v.priceCents,
-      compareAtPriceCents: v.compareAtPriceCents,
-      stockCount: v._count.licenseKeys,
-    })),
+    variants: (() => {
+      const totalStock = prod._count.licenseKeys;
+      const specificVariantKeysSum = prod.variants.reduce((acc, v) => acc + v._count.licenseKeys, 0);
+      const unassignedGlobalKeys = Math.max(0, totalStock - specificVariantKeysSum);
+
+      return prod.variants.map((v) => ({
+        id: v.id,
+        name: v.name,
+        durationValue: v.durationValue,
+        durationType: v.durationType,
+        priceCents: v.priceCents,
+        compareAtPriceCents: v.compareAtPriceCents,
+        stockCount: v._count.licenseKeys > 0 ? v._count.licenseKeys : unassignedGlobalKeys,
+      }));
+    })(),
     changelogs: prod.changelogs.map((c) => ({
       id: c.id,
       productSlug: prod.slug,

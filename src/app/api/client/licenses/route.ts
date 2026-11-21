@@ -8,7 +8,10 @@ export async function GET(req: NextRequest) {
     if (!auth.authorized) return auth.response!;
 
     const licenses = await prisma.licenseKey.findMany({
-      where: { userId: auth.userId! },
+      where: {
+        userId: auth.userId!,
+        status: { in: ["NOT_ACTIVATED", "ACTIVE", "FROZEN", "EXPIRED"] },
+      },
       include: {
         product: {
           select: {

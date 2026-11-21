@@ -185,20 +185,6 @@ export default function HomePage() {
   return (
     <div className="flex flex-col w-full">
       {/* ---------------------------------------------------- */}
-      {/* MARQUEE OFICIAL                                      */}
-      {/* ---------------------------------------------------- */}
-      <div className="w-full bg-[#061e14] py-2.5 overflow-hidden border-y border-white/5">
-        <div className="flex whitespace-nowrap animate-marquee gap-8 text-[#10b981] font-mono text-xs tracking-widest uppercase font-semibold">
-          {[...marqueeItems, ...marqueeItems, ...marqueeItems].map((text, idx) => (
-            <span key={idx} className="inline-flex items-center gap-2">
-              <span>{text}</span>
-              <span className="text-white/20 ml-6">•</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ---------------------------------------------------- */}
       {/* HERO OFICIAL                                         */}
       {/* ---------------------------------------------------- */}
       <section className="relative z-10 max-w-6xl mx-auto px-4 lg:px-8 pt-12 pb-12 flex flex-col items-center text-center">
@@ -256,6 +242,20 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* MARQUEE OFICIAL (Abaixo do Hero)                     */}
+      {/* ---------------------------------------------------- */}
+      <div className="w-full bg-[#061e14] py-2.5 overflow-hidden border-y border-white/5 my-4">
+        <div className="flex whitespace-nowrap animate-marquee gap-8 text-[#10b981] font-mono text-xs tracking-widest uppercase font-semibold">
+          {[...marqueeItems, ...marqueeItems, ...marqueeItems].map((text, idx) => (
+            <span key={idx} className="inline-flex items-center gap-2">
+              <span>{text}</span>
+              <span className="text-white/20 ml-6">•</span>
+            </span>
+          ))}
+        </div>
+      </div>
 
       {/* ---------------------------------------------------- */}
       {/* 01 / CATÁLOGO                                        */}

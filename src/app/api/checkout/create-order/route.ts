@@ -29,6 +29,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validação estrita: Aceitar exclusivamente Pix via Mercado Pago
+    if (method !== "PIX" || (gateway && gateway !== "MERCADOPAGO")) {
+      return NextResponse.json(
+        { error: "No momento a Overclock Store aceita exclusivamente pagamentos via Pix (Mercado Pago)." },
+        { status: 400 }
+      );
+    }
+
     // 1. Identificar ou Criar Usuário
     const session = await getServerSession(authOptions);
     let userId = session?.user?.id;
@@ -127,11 +135,12 @@ export async function POST(req: NextRequest) {
 
     // 5. Transação Atômica com Lock Postgres Real (FOR UPDATE SKIP LOCKED)
     const result = await prisma.$transaction(async (tx) => {
-      // LOCK ATÔMICO NO POSTGRESQL
+      // LOCK ATÔMICO NO POSTGRESQL: Prioriza chave da variante específica, ou pega chave disponível do mesmo produto
       const lockedKeys: { id: string }[] = await tx.$queryRaw`
         SELECT id FROM "LicenseKey" 
-        WHERE "variantId" = ${variant.id} 
+        WHERE ("variantId" = ${variant.id} OR ("productId" = ${variant.productId} AND "variantId" IS NULL)) 
           AND status = 'UNASSIGNED' 
+        ORDER BY CASE WHEN "variantId" = ${variant.id} THEN 0 ELSE 1 END, "createdAt" ASC
         LIMIT 1 
         FOR UPDATE SKIP LOCKED
       `;
@@ -200,14 +209,15 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Atualiza a Chave para RESERVED com janela de 15 minutos
-      const reservedUntil = new Date(Date.now() + 15 * 60 * 1000);
+      // Atualiza a Chave para RESERVED com janela de 30 minutos alinhada ao Pix
+      const reservedUntil = new Date(Date.now() + 30 * 60 * 1000);
       await tx.licenseKey.update({
         where: { id: keyIdToReserve },
         data: {
           status: KeyStatus.RESERVED,
           reservedUntil,
           orderId: order.id,
+          variantId: variant.id,
         },
       });
 

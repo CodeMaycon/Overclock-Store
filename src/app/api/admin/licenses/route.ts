@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
+import { releaseExpiredReservations } from "@/lib/reservation";
 import { KeyStatus } from "@prisma/client";
 
 // GET /api/admin/licenses - Estatísticas gerais e listagem de chaves com filtros
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "50", 10);
 
   try {
+    await releaseExpiredReservations();
     const where: any = {};
     if (productId) where.productId = productId;
     if (status) where.status = status;

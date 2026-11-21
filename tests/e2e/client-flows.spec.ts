@@ -4,9 +4,11 @@ test.describe("Fluxos Completos do Cliente - Overclock Store", () => {
   test("1. Home: Nova copy oficial, Marquee, Hero, 4 Microblocos e 7 Seções Numeradas", async ({ page }) => {
     await page.goto("/");
 
-    // 1. Navbar e logo da Overclock Store
+    // 1. Navbar e logo da Overclock Store (sem badge OFICIAL no Discord)
     const logo = page.locator("header img[alt='OVERCLOCK STORE']");
     await expect(logo).toBeVisible();
+    await expect(page.locator("header a[href*='discord']")).toBeVisible();
+    await expect(page.locator("header a[href*='discord']")).not.toContainText("OFICIAL");
 
     // 2. Faixa superior / Marquee oficial
     await expect(page.locator("body")).toContainText("ENTREGA APÓS CONFIRMAÇÃO DO PIX");
@@ -205,7 +207,7 @@ test.describe("Fluxos Completos do Cliente - Overclock Store", () => {
     await expect(page.locator("body")).not.toContainText("SERVIDOR BR-01");
   });
 
-  test("8. Pedido Pix (/order/[id]): QR Code e Copia e Cola legítimos", async ({ page }) => {
+  test("8. Pedido Pix (/order/[id]): QR Code legítimo, reserva de 30 min e chave protegida em PENDING", async ({ page }) => {
     await page.route("**/api/orders/ord-test-real", async (route) => {
       await route.fulfill({
         status: 200,
@@ -216,6 +218,7 @@ test.describe("Fluxos Completos do Cliente - Overclock Store", () => {
             orderNumber: "ORD-2026-8888",
             status: "PENDING",
             totalCents: 7990,
+            deliveredKey: null,
             items: [
               {
                 id: "item-1",
@@ -240,8 +243,55 @@ test.describe("Fluxos Completos do Cliente - Overclock Store", () => {
     await page.goto("/order/ord-test-real");
     await expect(page.locator("body")).toContainText("R$ 79,90");
     await expect(page.locator("body")).toContainText("CÓDIGO PIX COPIA E COLA");
+    await expect(page.locator("body")).toContainText("RESERVA ATÔMICA ATIVA // 30 MINUTOS");
+    
+    // Confirma que NÃO exibe chave enquanto pendente
+    await expect(page.locator("body")).not.toContainText("SUA CHAVE DE ACESSO:");
+    await expect(page.locator("body")).not.toContainText("OVERCLOCK-");
+
+    // Confirma ausência total de botão ou menção a Stripe/Cartão
+    await expect(page.locator("body")).not.toContainText("Stripe Checkout Seguro");
+    await expect(page.locator("body")).not.toContainText("Ir para Checkout Stripe");
+
     const qrImage = page.locator("img[alt*='QR Code Pix']");
     await expect(qrImage).toBeVisible();
+  });
+
+  test("8b. Checkout (/checkout/[variantId]): Exclusividade de Pix Mercado Pago sem opção de Cartão ou Stripe", async ({ page }) => {
+    await page.route("**/api/products", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          products: [
+            {
+              id: "prod-chk-1",
+              name: "Software Seguro Pro",
+              slug: "software-seguro-pro",
+              category: "Utilitário",
+              variants: [
+                {
+                  id: "var-chk-1",
+                  name: "Acesso Mensal",
+                  priceCents: 4990,
+                  stockCount: 10,
+                },
+              ],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto("/checkout/var-chk-1");
+    await expect(page.locator("body")).toContainText("Pix Instantâneo (Mercado Pago)");
+    await expect(page.locator("body")).toContainText("QR Code & Copia e Cola • Liberação Imediata");
+    
+    // Garante ausência completa de cartão de crédito e Stripe
+    await expect(page.locator("body")).not.toContainText("Cartão de Crédito");
+    await expect(page.locator("body")).not.toContainText("Stripe");
+    await expect(page.locator("body")).not.toContainText("Checkout Seguro Stripe");
   });
 
   test("9. Dashboard: Histórico de pedidos e fluxo de Avaliar Compra", async ({ page, context }) => {

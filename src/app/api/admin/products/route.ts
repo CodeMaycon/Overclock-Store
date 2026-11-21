@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
+import { releaseExpiredReservations } from "@/lib/reservation";
 import { ProductStatus, DurationType, StockType } from "@prisma/client";
 
 // GET /api/admin/products - Lista todos os produtos com estoque real
@@ -9,6 +10,7 @@ export async function GET() {
   if (!auth.authorized) return auth.response!;
 
   try {
+    await releaseExpiredReservations();
     const products = await prisma.product.findMany({
       orderBy: [
         { orderPriority: "desc" },

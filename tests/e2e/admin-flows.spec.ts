@@ -684,4 +684,75 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
     const approveBtn = page.locator("button:has-text('Aprovar & Publicar')").first();
     await approveBtn.click();
   });
+
+  test("13. Geração de Chaves: Adição de exatamente 1 chave sem fallback para 10", async ({ page }) => {
+    let capturedPayload: any = null;
+
+    await page.route("**/api/admin/products", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          products: [
+            {
+              id: "prod-gen-1",
+              name: "Software Teste 1 Key",
+              slug: "software-teste-1-key",
+              category: "FPS",
+              variants: [
+                {
+                  id: "var-gen-1",
+                  name: "Passe Diário (24h)",
+                  priceCents: 2490,
+                  stockCount: 0,
+                },
+              ],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/admin/licenses/generate", async (route) => {
+      capturedPayload = await route.request().postDataJSON();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          count: capturedPayload.count || capturedPayload.quantity || 1,
+          generatedCount: capturedPayload.count || capturedPayload.quantity || 1,
+          message: `${capturedPayload.count || 1} chave gerada com sucesso!`,
+        }),
+      });
+    });
+
+    await page.goto("/admin");
+    const productsTab = page.locator("button:has-text('Produtos & Estoque')").first();
+    await productsTab.click();
+
+    // Abre o modal de Importar/Gerar Chaves
+    const importKeysBtn = page.locator("button:has-text('Importar Chaves')").first();
+    await importKeysBtn.click();
+
+    await expect(page.locator("body")).toContainText("Gestão de Estoque de Chaves");
+
+    // Alterne para modo Gerar Auto
+    const generateModeBtn = page.locator("button:has-text('Gerar Auto')");
+    await generateModeBtn.click();
+
+    // Verifica que o campo de quantidade inicia com '1' e permite definir '1'
+    const qtyInput = page.locator("input[type='number']");
+    await expect(qtyInput).toHaveValue("1");
+
+    // Clica em Gerar e Salvar
+    const submitBtn = page.locator("button:has-text('Gerar e Salvar')");
+    await submitBtn.click();
+
+    // Valida que o payload enviado à API foi exatamente 1 chave (e não fallback para 10)
+    expect(capturedPayload).not.toBeNull();
+    const effectiveQty = capturedPayload.quantity !== undefined ? capturedPayload.quantity : capturedPayload.count;
+    expect(effectiveQty).toBe(1);
+  });
 });

@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { productId, variantId, quantity = 10, prefix = "OVERCLOCK" } = body;
+    const { productId, variantId, quantity, count, prefix = "OVERCLOCK" } = body;
 
     if (!productId || !variantId) {
       return NextResponse.json(
@@ -20,7 +20,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const qty = Math.min(Math.max(parseInt(quantity, 10) || 10, 1), 500);
+    const rawQty = quantity !== undefined ? quantity : count;
+    const parsed = parseInt(String(rawQty), 10);
+    const qty = Math.min(Math.max(isNaN(parsed) ? 1 : parsed, 1), 500);
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `${qty} chaves geradas e adicionadas ao estoque com sucesso!`,
+      count: qty,
       generatedCount: qty,
       batchId,
       preview: generatedKeys.slice(0, 3),

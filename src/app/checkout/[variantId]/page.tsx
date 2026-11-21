@@ -75,7 +75,7 @@ function CheckoutContent({ params }: CheckoutPageProps) {
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Método de Pagamento Selecionado
-  const [paymentMethod, setPaymentMethod] = useState<"PIX" | "STRIPE" | "CRYPTO">("PIX");
+  const [paymentMethod] = useState<"PIX">("PIX");
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -256,22 +256,10 @@ function CheckoutContent({ params }: CheckoutPageProps) {
     setIsProcessing(true);
 
     try {
-      const gatewayMapping = {
-        PIX: "MERCADOPAGO",
-        STRIPE: "STRIPE",
-        CRYPTO: "CRYPTO",
-      };
-
-      const methodMapping = {
-        PIX: "PIX",
-        STRIPE: "CREDIT_CARD",
-        CRYPTO: "CRYPTO",
-      };
-
       const payload = {
         variantId: resolvedParams.variantId,
-        gateway: gatewayMapping[paymentMethod],
-        method: methodMapping[paymentMethod],
+        gateway: "MERCADOPAGO",
+        method: "PIX",
         couponCode: appliedCoupon?.code,
         email: email.trim(),
         fullName: fullName.trim(),
@@ -324,7 +312,7 @@ function CheckoutContent({ params }: CheckoutPageProps) {
   const prodName = targetProduct?.name || "Software Overclock";
   const prodSlug = targetProduct?.slug || "";
   const prodCategory = targetProduct?.category || "FPS Tático";
-  const prodImage = targetProduct?.images[0] || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200";
+  const prodImage = targetProduct?.images?.[0] || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1200";
   const varName = targetVariant?.name || "Licença Digital";
   const rawPriceCents = targetVariant?.priceCents || 2490;
   const rawPrice = rawPriceCents / 100;
@@ -595,74 +583,25 @@ function CheckoutContent({ params }: CheckoutPageProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              {/* PIX */}
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("PIX")}
-                className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-                  paymentMethod === "PIX"
-                    ? "bg-[#10b981]/15 border-[#10b981] ring-1 ring-[#10b981]/30 shadow-lg"
-                    : "bg-[#101412] border-white/5 hover:border-white/15"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <QrCode className="w-5 h-5 text-[#10b981]" />
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#10b981]/20 text-[#10b981] font-bold">
-                    IMEDIATO
-                  </span>
+            <div className="pt-2">
+              <div className="p-4 rounded-xl border border-[#10b981] bg-[#10b981]/15 ring-1 ring-[#10b981]/30 shadow-lg flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#10b981]/20 flex items-center justify-center shrink-0">
+                    <QrCode className="w-5 h-5 text-[#10b981]" />
+                  </div>
+                  <div>
+                    <span className="font-['Space_Grotesk'] text-sm font-bold text-white block">
+                      Pix Instantâneo (Mercado Pago)
+                    </span>
+                    <span className="text-[11px] text-[#bbcabf] font-mono">
+                      QR Code &amp; Copia e Cola • Liberação Imediata
+                    </span>
+                  </div>
                 </div>
-                <span className="font-['Space_Grotesk'] text-sm font-bold text-white block">
-                  Pix Instantâneo
+                <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-[#10b981]/20 text-[#10b981] font-bold border border-[#10b981]/30">
+                  ATIVO
                 </span>
-                <span className="text-[11px] text-[#86948a] font-mono">
-                  QR Code &amp; Copia e Cola
-                </span>
-              </button>
-
-              {/* STRIPE */}
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("STRIPE")}
-                className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-                  paymentMethod === "STRIPE"
-                    ? "bg-[#10b981]/15 border-[#10b981] ring-1 ring-[#10b981]/30 shadow-lg"
-                    : "bg-[#101412] border-white/5 hover:border-white/15"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <CreditCard className="w-5 h-5 text-[#10b981]" />
-                  <span className="text-[10px] font-mono text-[#86948a]">GLOBAL</span>
-                </div>
-                <span className="font-['Space_Grotesk'] text-sm font-bold text-white block">
-                  Cartão de Crédito
-                </span>
-                <span className="text-[11px] text-[#86948a] font-mono">
-                  Checkout Seguro Stripe
-                </span>
-              </button>
-
-              {/* CRYPTO */}
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("CRYPTO")}
-                className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-                  paymentMethod === "CRYPTO"
-                    ? "bg-[#10b981]/15 border-[#10b981] ring-1 ring-[#10b981]/30 shadow-lg"
-                    : "bg-[#101412] border-white/5 hover:border-white/15"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <Coins className="w-5 h-5 text-[#10b981]" />
-                  <span className="text-[10px] font-mono text-purple-400">ANÔNIMO</span>
-                </div>
-                <span className="font-['Space_Grotesk'] text-sm font-bold text-white block">
-                  Criptomoedas
-                </span>
-                <span className="text-[11px] text-[#86948a] font-mono">
-                  BTC, ETH, USDT
-                </span>
-              </button>
+              </div>
             </div>
 
             {/* Termos de Serviço */}

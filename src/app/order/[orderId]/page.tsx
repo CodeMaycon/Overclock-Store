@@ -225,7 +225,7 @@ function OrderContent({ params }: OrderPageProps) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/8">
             <div>
               <span className="font-mono text-[10px] text-amber-400 uppercase tracking-widest block font-bold">
-                RESERVA ATÔMICA ATIVA // 15 MINUTOS
+                RESERVA ATÔMICA ATIVA // 30 MINUTOS
               </span>
               <h2 className="font-['Space_Grotesk'] text-lg font-bold text-white mt-1">
                 {primaryItem ? `${primaryItem.productName} — ${primaryItem.variantName}` : "Licença de Software"}
@@ -302,28 +302,6 @@ function OrderContent({ params }: OrderPageProps) {
                   <p>3. Nossa API detectará a liquidação e esta página liberará sua chave instantaneamente em segundos.</p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Cartão de Crédito / Stripe */}
-          {order.payment?.method === "CREDIT_CARD" && order.payment.checkoutUrl && (
-            <div className="p-6 rounded-2xl bg-[#101412] border border-white/10 text-center space-y-4">
-              <CreditCard className="w-10 h-10 text-[#10b981] mx-auto" />
-              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white">
-                Finalizar Pagamento no Stripe Checkout Seguro
-              </h3>
-              <p className="text-xs text-[#bbcabf] max-w-md mx-auto">
-                Você será redirecionado para a página criptografada de checkout do Stripe para digitar os dados do seu cartão com proteção 3D Secure.
-              </p>
-              <a
-                href={order.payment.checkoutUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#10b981] hover:bg-[#34d399] text-[#050706] font-['Space_Grotesk'] font-bold text-xs shadow-lg shadow-[#10b981]/25"
-              >
-                <span>Ir para Checkout Stripe</span>
-                <ExternalLink className="w-4 h-4" />
-              </a>
             </div>
           )}
 

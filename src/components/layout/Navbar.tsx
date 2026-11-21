@@ -86,9 +86,6 @@ export function Navbar() {
           >
             <span className="material-symbols-outlined text-primary text-base">forum</span>
             <span>Discord</span>
-            <span className="font-mono-badge text-mono-badge px-1.5 py-0.5 rounded bg-primary-container text-on-primary-container font-semibold">
-              OFICIAL
-            </span>
           </a>
 
           {/* Conditional Profile Dropdown (Logged in) or Client Area (Logged out) */}
@@ -270,11 +267,8 @@ export function Navbar() {
             >
               <div className="flex items-center gap-2">
                 <span className="text-base">🎮</span>
-                <span>Comunidade Discord Oficial</span>
+                <span>Comunidade Discord</span>
               </div>
-              <span className="px-2 py-0.5 rounded bg-[#5865F2]/20 text-[10px] font-mono">
-                OFICIAL
-              </span>
             </a>
 
             {/* Actions */}

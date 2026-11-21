@@ -27,7 +27,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           orderBy: { createdAt: "desc" },
           take: 1,
         },
-        licenseKeys: true,
         user: {
           select: {
             id: true,

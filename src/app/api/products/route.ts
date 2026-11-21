@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { releaseExpiredReservations } from "@/lib/reservation";
 import { ProductStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("search");
 
   try {
+    // 1. Libera reservas expiradas antes de calcular estoque
+    await releaseExpiredReservations();
+
     const where: any = {
       status: { not: ProductStatus.DISABLED },
     };
@@ -65,6 +69,9 @@ export async function GET(req: NextRequest) {
         ? Math.min(...prod.variants.map((v) => v.priceCents)) 
         : 0;
 
+      const specificVariantKeysSum = prod.variants.reduce((acc, v) => acc + v._count.licenseKeys, 0);
+      const unassignedGlobalKeys = Math.max(0, totalStock - specificVariantKeysSum);
+
       return {
         id: prod.id,
         slug: prod.slug,
@@ -88,7 +95,7 @@ export async function GET(req: NextRequest) {
           durationType: v.durationType,
           priceCents: v.priceCents,
           compareAtPriceCents: v.compareAtPriceCents,
-          stockCount: v._count.licenseKeys,
+          stockCount: v._count.licenseKeys > 0 ? v._count.licenseKeys : unassignedGlobalKeys,
         })),
       };
     });

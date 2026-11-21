@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
+import { releaseExpiredReservations } from "@/lib/reservation";
 
 export async function GET() {
   const auth = await requireAdminSession();
   if (!auth.authorized) return auth.response!;
 
   try {
+    // Libera reservas expiradas antes de compor métricas
+    await releaseExpiredReservations();
+
     // 1. Faturamento Total e Pedidos
     const completedOrders = await prisma.order.findMany({
       where: { status: "COMPLETED" },

@@ -354,7 +354,7 @@ export default function AdminBackofficePage() {
   const [selectedVariantForImport, setSelectedVariantForImport] = useState("");
   const [importMode, setImportMode] = useState<"manual" | "generate">("manual");
   const [batchKeysText, setBatchKeysText] = useState("");
-  const [generateCount, setGenerateCount] = useState("10");
+  const [generateCount, setGenerateCount] = useState("1");
   const [savingKeys, setSavingKeys] = useState(false);
 
   const [selectedProductForFreeze, setSelectedProductForFreeze] = useState("");
@@ -1277,13 +1277,14 @@ export default function AdminBackofficePage() {
         setBatchKeysText("");
         showAdminToast(`${data.count} chaves importadas com sucesso como UNASSIGNED!`);
       } else {
-        const countNum = parseInt(generateCount, 10) || 10;
+        const countNum = Math.max(1, parseInt(generateCount, 10) || 1);
         const res = await fetch("/api/admin/licenses/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             productId: selectedProductForImport,
             variantId: selectedVariantForImport,
+            quantity: countNum,
             count: countNum,
             prefix: "OVERCLOCK",
           }),
