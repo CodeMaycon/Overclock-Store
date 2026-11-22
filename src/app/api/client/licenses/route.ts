@@ -43,7 +43,11 @@ export async function GET(req: NextRequest) {
       let isExpired = false;
       let expiresFormatted = "Não ativado";
 
-      if (lic.expiresAt) {
+      if (lic.variant.durationType === "LIFETIME") {
+        expiresFormatted = "Vitalício (Sem expiração)";
+      } else if (lic.variant.durationType === "ONE_TIME") {
+        expiresFormatted = lic.activatedAt ? "Utilizado (Uso Único)" : "Disponível (Uso Único)";
+      } else if (lic.expiresAt) {
         if (lic.expiresAt < now) {
           isExpired = true;
           expiresFormatted = "Expirado";
@@ -69,6 +73,8 @@ export async function GET(req: NextRequest) {
         productStatus: lic.product.status,
         downloadUrl: lic.product.downloadFileUrl,
         variantName: lic.variant.name,
+        durationType: lic.variant.durationType,
+        durationValue: lic.variant.durationValue,
         activatedAt: lic.activatedAt,
         expiresAt: lic.expiresAt,
         expiresFormatted,

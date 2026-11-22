@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { slugify } from "@/lib/slug";
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -10,13 +11,22 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const resolved = await params;
 
   try {
-    let targetSlug = resolved.slug;
-    if (targetSlug === "phantom-apex") targetSlug = "apex-phantom-pro";
-    if (targetSlug === "vortex-warzone") targetSlug = "warzone-ghost-ring0";
-    if (targetSlug === "spectre-val") targetSlug = "valorant-discreet-engine";
+    let rawSlug = resolved.slug;
+    let decodedSlug = rawSlug;
+    try {
+      decodedSlug = decodeURIComponent(rawSlug);
+    } catch (_) {}
 
-    const prod = await prisma.product.findUnique({
-      where: { slug: targetSlug },
+    const cleanSlug = slugify(decodedSlug);
+
+    const prod = await prisma.product.findFirst({
+      where: {
+        OR: [
+          { slug: cleanSlug },
+          { slug: decodedSlug },
+          { slug: rawSlug },
+        ],
+      },
       include: {
         variants: {
           where: { isActive: true },

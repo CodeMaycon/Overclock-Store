@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { releaseExpiredReservations } from "@/lib/reservation";
+import { slugify } from "@/lib/slug";
 import ProductDetailClient from "./ProductDetailClient";
 
 interface ProductPageProps {
@@ -10,11 +11,24 @@ interface ProductPageProps {
 export default async function ProductDetailPage({ params }: ProductPageProps) {
   const { slug } = await params;
 
+  let decodedSlug = slug;
+  try {
+    decodedSlug = decodeURIComponent(slug);
+  } catch (_) {}
+
+  const cleanSlug = slugify(decodedSlug);
+
   // 1. Libera reservas expiradas antes de carregar produto e estoque
   await releaseExpiredReservations();
 
-  let prod = await prisma.product.findUnique({
-    where: { slug },
+  let prod = await prisma.product.findFirst({
+    where: {
+      OR: [
+        { slug: cleanSlug },
+        { slug: decodedSlug },
+        { slug },
+      ],
+    },
     include: {
       variants: {
         where: { isActive: true },

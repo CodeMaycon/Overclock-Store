@@ -755,4 +755,195 @@ test.describe("Fluxos Completos do Administrador - Overclock Store", () => {
     const effectiveQty = capturedPayload.quantity !== undefined ? capturedPayload.quantity : capturedPayload.count;
     expect(effectiveQty).toBe(1);
   });
+
+  test("14. Criação de Produto: Nome com espaços gera slug limpo e acessível sem 404", async ({ page }) => {
+    let createdProductPayload: any = null;
+
+    await page.route("**/api/admin/products", async (route) => {
+      if (route.request().method() === "POST") {
+        createdProductPayload = await route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            product: {
+              id: "prod-oxine-spoofer",
+              name: createdProductPayload.name,
+              slug: createdProductPayload.slug,
+              category: createdProductPayload.category || "Utilitários",
+              status: "ONLINE",
+              currentVersion: "2.1.0",
+              stockCount: 0,
+              variants: [],
+            },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, products: [] }),
+        });
+      }
+    });
+
+    await page.goto("/admin");
+    await page.locator("button:has-text('Produtos & Estoque')").first().click();
+
+    // Abre o modal de cadastro de novo produto
+    await page.locator("button:has-text('+ Novo Produto')").click();
+
+    // Digita nome com espaços e acentos
+    const nameInput = page.locator("input[placeholder*='Apex Phantom Pro']");
+    await nameInput.fill("Oxine Spoofer Permanent");
+
+    // Preenche tagline obrigatória
+    await page.locator("input[placeholder*='O padrão definitivo']").fill("Spoofer permanente sem formatação.");
+
+    // Slug gerado automaticamente em tempo real no input de slug
+    const slugInput = page.locator("input[placeholder*='apex-phantom-pro']");
+    await expect(slugInput).toHaveValue("oxine-spoofer-permanent");
+
+    // Clica em salvar
+    const saveBtn = page.locator("button:has-text('Cadastrar Software')");
+    await saveBtn.click();
+
+    // Confirma que a API recebeu o slug sanitizado e sem espaços
+    expect(createdProductPayload).not.toBeNull();
+    expect(createdProductPayload.slug).toBe("oxine-spoofer-permanent");
+  });
+
+  test("15. Modal de Produto no Admin: Renderização em Portal com botões Cancelar e Salvar visíveis", async ({ page }) => {
+    await page.goto("/admin");
+    await page.locator("button:has-text('Produtos & Estoque')").first().click();
+
+    // Abre o modal de produto
+    await page.locator("button:has-text('+ Novo Produto')").click();
+
+    // O modal deve estar montado diretamente sob document.body via Portal com z-[100]
+    const modalOverlay = page.locator(".fixed.inset-0.z-\\[100\\]");
+    await expect(modalOverlay).toBeVisible();
+
+    // Botões no rodapé fixo devem ser visíveis e clicáveis
+    const cancelBtn = page.locator("button:has-text('Cancelar')").first();
+    const saveBtn = page.locator("button:has-text('Cadastrar Software')");
+
+    await expect(cancelBtn).toBeVisible();
+    await expect(saveBtn).toBeVisible();
+
+    // Fecha o modal via botão cancelar
+    await cancelBtn.click();
+    await expect(modalOverlay).not.toBeVisible();
+  });
+
+  test("16. Variantes Flexíveis: Configuração de Uso Único e Lifetime no Admin", async ({ page }) => {
+    let savedPayload: any = null;
+
+    await page.route("**/api/admin/products", async (route) => {
+      if (route.request().method() === "POST") {
+        savedPayload = await route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            product: {
+              id: "prod-spoofer-vars",
+              name: savedPayload.name,
+              slug: savedPayload.slug,
+              category: savedPayload.category,
+              variants: savedPayload.variants,
+            },
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, products: [] }),
+        });
+      }
+    });
+
+    await page.goto("/admin");
+    await page.locator("button:has-text('Produtos & Estoque')").first().click();
+    await page.locator("button:has-text('+ Novo Produto')").click();
+
+    // Preenche nome
+    await page.locator("input[placeholder*='Apex Phantom Pro']").fill("Oxine Permanent Spoofer");
+
+    // Preenche tagline obrigatória
+    await page.locator("input[placeholder*='O padrão definitivo']").fill("Spoofer permanente com driver indetectável.");
+
+    // Adiciona variante Uso Único
+    await page.locator("button:has-text('+ Adicionar Variante')").click();
+    const typeSelects = page.locator("select:has-text('Uso Único (One-Time)')");
+    // Seleciona ONE_TIME
+    await typeSelects.first().selectOption("ONE_TIME");
+
+    // Preenche preço da variante
+    const priceInput = page.locator("input[placeholder='149,90']").first();
+    await priceInput.fill("89,90");
+
+    // Salva o produto
+    await page.locator("button:has-text('Cadastrar Software')").click();
+
+    expect(savedPayload).not.toBeNull();
+    expect(savedPayload.variants).toBeDefined();
+    const oneTimeVar = savedPayload.variants.find((v: any) => v.durationType === "ONE_TIME");
+    expect(oneTimeVar).toBeDefined();
+    expect(oneTimeVar.name).toBe("Uso Único");
+  });
+
+  test("17. Gestão Dinâmica de Categorias: Criação refletindo no formulário de produtos", async ({ page }) => {
+    let createdCategoryPayload: any = null;
+    let categoriesList = [
+      { id: "cat-1", name: "Utilitários", slug: "utilitarios", orderPriority: 1, productCount: 2 },
+    ];
+
+    await page.route("**/api/admin/categories*", async (route) => {
+      if (route.request().method() === "POST") {
+        createdCategoryPayload = await route.request().postDataJSON();
+        const newCat = {
+          id: "cat-2",
+          name: createdCategoryPayload.name,
+          slug: createdCategoryPayload.slug,
+          orderPriority: createdCategoryPayload.orderPriority || 2,
+          productCount: 0,
+        };
+        categoriesList.push(newCat);
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, category: newCat }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, categories: categoriesList }),
+        });
+      }
+    });
+
+    await page.goto("/admin");
+    await page.locator("button:has-text('Produtos & Estoque')").first().click();
+
+    // Acessa sub-aba Categorias
+    await page.locator("button:has-text('Categorias (')").click();
+
+    // Clica no botão + Nova Categoria
+    await page.locator("button:has-text('+ Nova Categoria')").click();
+
+    // Preenche nome da nova categoria
+    await page.locator("input[placeholder*='Utilitários']").fill("Hardware & Bios");
+
+    // Salva a categoria
+    await page.locator("button:has-text('Salvar Categoria')").click();
+
+    expect(createdCategoryPayload).not.toBeNull();
+    expect(createdCategoryPayload.name).toBe("Hardware & Bios");
+    expect(createdCategoryPayload.slug).toBe("hardware-bios");
+  });
 });

@@ -45,10 +45,33 @@ import {
   EyeOff,
   Gift,
   Copy,
-  Star
+  Star,
+  FolderTree,
+  UserCheck
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { useAuth } from "@/lib/auth-context";
+import { AdminModal } from "@/components/admin/AdminModal";
+import { slugify } from "@/lib/slug";
+
+export interface AdminCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  orderPriority: number;
+  productCount?: number;
+}
+
+export interface FormVariant {
+  id?: string;
+  name: string;
+  durationType: "ONE_TIME" | "LIFETIME" | "DAYS" | "HOURS";
+  durationValue: number;
+  priceBrl: string;
+  compareAtPriceBrl?: string;
+  isActive: boolean;
+}
 
 interface OverviewData {
   kpis: {
@@ -171,6 +194,10 @@ interface AdminVariant {
   priceCents: number;
   isLifetime: boolean;
   stockCount: number;
+  durationType?: "DAYS" | "HOURS" | "LIFETIME" | "ONE_TIME";
+  durationValue?: number;
+  compareAtPriceCents?: number | null;
+  isActive?: boolean;
 }
 
 interface AdminProduct {
@@ -347,6 +374,20 @@ export default function AdminBackofficePage() {
   const [prodFormChangelogTitle, setProdFormChangelogTitle] = useState("");
   const [prodFormChangelogChanges, setProdFormChangelogChanges] = useState("");
 
+  const [prodFormVariants, setProdFormVariants] = useState<FormVariant[]>([]);
+  const [prodFormSlugEdited, setProdFormSlugEdited] = useState(false);
+
+  // Estados de Categorias Dinâmicas
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [categoryFormName, setCategoryFormName] = useState("");
+  const [categoryFormSlug, setCategoryFormSlug] = useState("");
+  const [categoryFormDesc, setCategoryFormDesc] = useState("");
+  const [categoryFormOrder, setCategoryFormOrder] = useState("0");
+  const [savingCategory, setSavingCategory] = useState(false);
+
   const [savingProduct, setSavingProduct] = useState(false);
 
   // Estados de Chaves / Modais de Operação
@@ -373,8 +414,8 @@ export default function AdminBackofficePage() {
     setTimeout(() => setAdminNotice(null), 4000);
   };
 
-  // Sub-aba de Produtos: Catálogo ou Gestão de Chaves
-  const [productSubTab, setProductSubTab] = useState<"catalog" | "keys">("catalog");
+  // Sub-aba de Produtos: Catálogo, Gestão de Chaves ou Categorias
+  const [productSubTab, setProductSubTab] = useState<"catalog" | "keys" | "categories">("catalog");
   const [keysList, setKeysList] = useState<any[]>([]);
   const [loadingKeys, setLoadingKeys] = useState(false);
   const [keyProductFilter, setKeyProductFilter] = useState("");
@@ -558,9 +599,10 @@ export default function AdminBackofficePage() {
   const loadAdminData = useCallback(async () => {
     setLoadingProducts(true);
     try {
-      const [prodsRes, licRes] = await Promise.all([
+      const [prodsRes, licRes, catRes] = await Promise.all([
         fetch("/api/admin/products"),
-        fetch("/api/admin/licenses")
+        fetch("/api/admin/licenses"),
+        fetch("/api/admin/categories")
       ]);
 
       if (prodsRes.ok) {
@@ -580,6 +622,11 @@ export default function AdminBackofficePage() {
           setLicenseMetrics(lData.metrics);
         }
       }
+
+      if (catRes.ok) {
+        const cData = await catRes.json();
+        setCategories(cData.categories || []);
+      }
     } catch (err) {
       console.error("Erro ao carregar dados administrativos:", err);
       showAdminToast("Erro de conexão ao carregar dados do banco.");
@@ -587,6 +634,93 @@ export default function AdminBackofficePage() {
       setLoadingProducts(false);
     }
   }, [selectedProductForImport]);
+
+  // Carregar categorias dinâmicas
+  const loadCategories = useCallback(async () => {
+    setLoadingCategories(true);
+    try {
+      const res = await fetch("/api/admin/categories");
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data.categories || []);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar categorias:", err);
+    } finally {
+      setLoadingCategories(false);
+    }
+  }, []);
+
+  const handleOpenNewCategory = () => {
+    setEditingCategoryId(null);
+    setCategoryFormName("");
+    setCategoryFormSlug("");
+    setCategoryFormDesc("");
+    setCategoryFormOrder(String(categories.length + 1));
+    setCategoryModalOpen(true);
+  };
+
+  const handleOpenEditCategory = (cat: AdminCategory) => {
+    setEditingCategoryId(cat.id);
+    setCategoryFormName(cat.name);
+    setCategoryFormSlug(cat.slug);
+    setCategoryFormDesc(cat.description || "");
+    setCategoryFormOrder(String(cat.orderPriority || 0));
+    setCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!categoryFormName.trim()) {
+      alert("O nome da categoria é obrigatório.");
+      return;
+    }
+
+    setSavingCategory(true);
+    try {
+      const url = editingCategoryId ? `/api/admin/categories/${editingCategoryId}` : "/api/admin/categories";
+      const method = editingCategoryId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: categoryFormName.trim(),
+          slug: slugify(categoryFormSlug || categoryFormName),
+          description: categoryFormDesc.trim() || null,
+          orderPriority: Number(categoryFormOrder) || 0,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao salvar categoria.");
+
+      showAdminToast(data.message || "Categoria salva com sucesso!");
+      setCategoryModalOpen(false);
+      loadCategories();
+      loadAdminData();
+    } catch (err: any) {
+      alert(`Falha ao salvar categoria: ${err.message}`);
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (cat: AdminCategory) => {
+    if (!confirm(`Deseja realmente excluir a categoria "${cat.name}"?`)) return;
+
+    try {
+      const res = await fetch(`/api/admin/categories/${cat.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir categoria.");
+
+      showAdminToast(data.message || "Categoria excluída com sucesso!");
+      loadCategories();
+      loadAdminData();
+    } catch (err: any) {
+      alert(`Não foi possível excluir: ${err.message}`);
+    }
+  };
 
   // Carregar overview com métricas consolidadas
   const loadOverview = useCallback(async () => {
@@ -1022,7 +1156,8 @@ export default function AdminBackofficePage() {
     setEditingProductId(null);
     setProdFormName("");
     setProdFormSlug("");
-    setProdFormCategory("FPS Tático");
+    setProdFormSlugEdited(false);
+    setProdFormCategory(categories[0]?.name || "Utilitários");
     setProdFormTagline("");
     setProdFormDesc("");
     setProdFormVideo("");
@@ -1030,10 +1165,26 @@ export default function AdminBackofficePage() {
     setProdFormDiscordRole("");
     setProdFormStatus("ONLINE");
     setProdFormIsFeatured(true);
-    setProdFormDailyPrice("24,90");
-    setProdFormWeeklyPrice("79,90");
-    setProdFormMonthlyPrice("169,90");
-    setProdFormLifetimePrice("499,90");
+
+    // Variantes flexíveis padrão inicializadas
+    setProdFormVariants([
+      {
+        name: "Uso Único",
+        durationType: "ONE_TIME",
+        durationValue: 0,
+        priceBrl: "49,90",
+        compareAtPriceBrl: "",
+        isActive: true,
+      },
+      {
+        name: "Licença Vitalícia (Lifetime)",
+        durationType: "LIFETIME",
+        durationValue: 0,
+        priceBrl: "149,90",
+        compareAtPriceBrl: "",
+        isActive: true,
+      },
+    ]);
 
     // Abas Técnicas Padrão
     setProdFormFeatures(
@@ -1054,6 +1205,7 @@ export default function AdminBackofficePage() {
     setEditingProductId(prod.id);
     setProdFormName(prod.name);
     setProdFormSlug(prod.slug);
+    setProdFormSlugEdited(true);
     setProdFormCategory(prod.category);
     setProdFormTagline(prod.tagline || "");
     setProdFormDesc(prod.description || "");
@@ -1073,15 +1225,51 @@ export default function AdminBackofficePage() {
     setProdFormChangelogTitle("");
     setProdFormChangelogChanges("");
 
-    const pDaily = prod.variants.find((v) => v.durationHours === 24 || v.name.includes("24"));
-    const pWeekly = prod.variants.find((v) => v.durationHours === 168 || v.name.includes("7"));
-    const pMonthly = prod.variants.find((v) => v.durationHours === 720 || v.name.includes("30"));
-    const pLife = prod.variants.find((v) => v.isLifetime || v.name.includes("Life"));
+    // Carrega variantes reais do produto
+    if (prod.variants && prod.variants.length > 0) {
+      const loadedVariants: FormVariant[] = prod.variants.map((v) => {
+        let dType: "ONE_TIME" | "LIFETIME" | "DAYS" | "HOURS" = "DAYS";
+        if (v.durationType === "ONE_TIME" || v.name?.toLowerCase().includes("uso único")) {
+          dType = "ONE_TIME";
+        } else if (v.durationType === "LIFETIME" || v.isLifetime || v.name?.toLowerCase().includes("lifetime") || v.name?.toLowerCase().includes("vitalíci")) {
+          dType = "LIFETIME";
+        } else if (v.durationType === "HOURS") {
+          dType = "HOURS";
+        } else {
+          dType = "DAYS";
+        }
 
-    if (pDaily) setProdFormDailyPrice(centsToBr(pDaily.priceCents));
-    if (pWeekly) setProdFormWeeklyPrice(centsToBr(pWeekly.priceCents));
-    if (pMonthly) setProdFormMonthlyPrice(centsToBr(pMonthly.priceCents));
-    if (pLife) setProdFormLifetimePrice(centsToBr(pLife.priceCents));
+        return {
+          id: v.id,
+          name: v.name,
+          durationType: dType,
+          durationValue: v.durationValue ?? (v.durationHours && v.durationHours >= 24 ? Math.floor(v.durationHours / 24) : (v.durationHours || 0)),
+          priceBrl: ((v.priceCents || 0) / 100).toFixed(2).replace(".", ","),
+          compareAtPriceBrl: v.compareAtPriceCents ? ((v.compareAtPriceCents || 0) / 100).toFixed(2).replace(".", ",") : "",
+          isActive: v.isActive !== false,
+        };
+      });
+      setProdFormVariants(loadedVariants);
+    } else {
+      setProdFormVariants([
+        {
+          name: "Uso Único",
+          durationType: "ONE_TIME",
+          durationValue: 0,
+          priceBrl: "49,90",
+          compareAtPriceBrl: "",
+          isActive: true,
+        },
+        {
+          name: "Licença Vitalícia (Lifetime)",
+          durationType: "LIFETIME",
+          durationValue: 0,
+          priceBrl: "149,90",
+          compareAtPriceBrl: "",
+          isActive: true,
+        },
+      ]);
+    }
 
     setProductModalOpen(true);
   };
@@ -1097,46 +1285,36 @@ export default function AdminBackofficePage() {
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const editingProd = products.find((p) => p.id === editingProductId);
-      const findVariantId = (durHours: number, isLife: boolean) => {
-        if (!editingProd) return undefined;
-        return editingProd.variants.find((v) => isLife ? v.isLifetime : v.durationHours === durHours)?.id;
-      };
+      const variantsPayload = prodFormVariants.map((v, idx) => {
+        const priceCents = parsePriceToCents(v.priceBrl);
+        const compareAtPriceCents = v.compareAtPriceBrl ? parsePriceToCents(v.compareAtPriceBrl) : null;
+        let dVal = Number(v.durationValue || 0);
 
-      const variantsPayload = [
-        {
-          id: findVariantId(24, false),
-          name: "Passe Diário (24h)",
-          durationHours: 24,
-          priceCents: parsePriceToCents(prodFormDailyPrice),
-          isLifetime: false,
-        },
-        {
-          id: findVariantId(168, false),
-          name: "Acesso Semanal (7 Dias)",
-          durationHours: 168,
-          priceCents: parsePriceToCents(prodFormWeeklyPrice),
-          isLifetime: false,
-        },
-        {
-          id: findVariantId(720, false),
-          name: "Acesso Mensal (30 Dias)",
-          durationHours: 720,
-          priceCents: parsePriceToCents(prodFormMonthlyPrice),
-          isLifetime: false,
-        },
-        {
-          id: findVariantId(876000, true),
-          name: "Licença Vitalícia (Lifetime)",
-          durationHours: 876000,
-          priceCents: parsePriceToCents(prodFormLifetimePrice),
-          isLifetime: true,
-        },
-      ];
+        if (v.durationType === "ONE_TIME" || v.durationType === "LIFETIME") {
+          dVal = 0;
+        } else if (v.durationType === "DAYS") {
+          dVal = dVal || 1;
+        } else if (v.durationType === "HOURS") {
+          dVal = dVal || 24;
+        }
+
+        return {
+          id: v.id,
+          name: v.name.trim() || (v.durationType === "ONE_TIME" ? "Uso Único" : v.durationType === "LIFETIME" ? "Lifetime" : "Plano"),
+          durationType: v.durationType,
+          durationValue: dVal,
+          durationHours: v.durationType === "DAYS" ? dVal * 24 : v.durationType === "HOURS" ? dVal : 0,
+          priceCents,
+          compareAtPriceCents,
+          isLifetime: v.durationType === "LIFETIME",
+          isActive: v.isActive,
+          orderPriority: idx + 1,
+        };
+      });
 
       const payload = {
-        name: prodFormName,
-        slug: prodFormSlug,
+        name: prodFormName.trim(),
+        slug: slugify(prodFormSlug || prodFormName),
         category: prodFormCategory,
         tagline: prodFormTagline,
         shortDescription: prodFormTagline,
@@ -1772,6 +1950,19 @@ export default function AdminBackofficePage() {
                   >
                     Estoque de Chaves ({licenseMetrics.unassigned} disp.)
                   </button>
+                  <button
+                    onClick={() => {
+                      setProductSubTab("categories");
+                      loadCategories();
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      productSubTab === "categories"
+                        ? "bg-[#10b981] text-[#050706]"
+                        : "text-[#86948a] hover:text-white"
+                    }`}
+                  >
+                    Categorias ({categories.length})
+                  </button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -2168,6 +2359,97 @@ export default function AdminBackofficePage() {
                                 </td>
                               </tr>
                             ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SUB-ABA 3: CATEGORIAS */}
+              {productSubTab === "categories" && (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-[#0b0f0d] border border-white/8">
+                    <div>
+                      <h3 className="font-['Space_Grotesk'] text-sm font-bold text-white flex items-center gap-2">
+                        <FolderTree className="w-4 h-4 text-[#10b981]" />
+                        <span>Gestão de Categorias Dinâmicas</span>
+                      </h3>
+                      <p className="text-xs text-[#86948a]">
+                        Categorias criadas aqui aparecem automaticamente no formulário de produtos, filtros do catálogo e status.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleOpenNewCategory}
+                      className="px-3.5 py-2 rounded-xl bg-[#10b981] hover:bg-[#34d399] text-[#050706] text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 shadow-md cursor-pointer shrink-0"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Nova Categoria</span>
+                    </button>
+                  </div>
+
+                  {loadingCategories ? (
+                    <div className="py-16 text-center text-[#86948a] font-mono text-xs flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#10b981]" />
+                      <span>Carregando categorias do PostgreSQL...</span>
+                    </div>
+                  ) : categories.length === 0 ? (
+                    <div className="p-8 rounded-2xl bg-[#0b0f0d] border border-white/8 text-center text-[#86948a] font-mono text-xs space-y-3">
+                      <FolderTree className="w-8 h-8 mx-auto text-[#10b981] opacity-40" />
+                      <p>Nenhuma categoria cadastrada no momento.</p>
+                      <button
+                        onClick={handleOpenNewCategory}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#10b981] text-[#050706] font-bold text-xs cursor-pointer"
+                      >
+                        Criar Primeira Categoria
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl bg-[#0b0f0d] border border-white/8 overflow-x-auto">
+                      <table className="w-full text-left text-xs font-mono min-w-[650px]">
+                        <thead className="bg-[#101412] text-[#86948a] uppercase border-b border-white/8">
+                          <tr>
+                            <th className="p-3.5">ORDEM</th>
+                            <th className="p-3.5">NOME DA CATEGORIA</th>
+                            <th className="p-3.5">SLUG</th>
+                            <th className="p-3.5">DESCRIÇÃO</th>
+                            <th className="p-3.5 text-center">PRODUTOS VINCULADOS</th>
+                            <th className="p-3.5 text-right">AÇÕES</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-white">
+                          {categories.map((cat) => (
+                            <tr key={cat.id} className="hover:bg-white/[0.02]">
+                              <td className="p-3.5 text-[#10b981] font-bold">{cat.orderPriority}</td>
+                              <td className="p-3.5 font-bold font-['Space_Grotesk'] text-sm">{cat.name}</td>
+                              <td className="p-3.5 text-[#86948a] font-mono">{cat.slug}</td>
+                              <td className="p-3.5 text-[#86948a] max-w-xs truncate">{cat.description || "—"}</td>
+                              <td className="p-3.5 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  (cat.productCount || 0) > 0 ? "bg-[#10b981]/15 text-[#10b981]" : "bg-white/5 text-[#86948a]"
+                                }`}>
+                                  {cat.productCount || 0} produto(s)
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleOpenEditCategory(cat)}
+                                    className="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-white font-bold text-[10px] transition-colors cursor-pointer"
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCategory(cat)}
+                                    className="px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-bold text-[10px] transition-colors cursor-pointer"
+                                  >
+                                    Excluir
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
@@ -3190,928 +3472,1149 @@ export default function AdminBackofficePage() {
       {/* ==================================================== */}
       {/* MODAL 1: FREEZE TIME & UNFREEZE                      */}
       {/* ==================================================== */}
-      {freezeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="rounded-2xl bg-[#0b0f0d] max-w-md w-full p-6 border border-white/15 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-white/8">
-              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
-                <Snowflake className="w-4 h-4 text-cyan-400" />
-                <span>Protocolo de Freeze Time</span>
-              </h3>
-              <button onClick={() => setFreezeModalOpen(false)} className="text-gray-500 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <AdminModal
+        isOpen={freezeModalOpen}
+        onClose={() => setFreezeModalOpen(false)}
+        title="Protocolo de Freeze Time"
+        icon={<Snowflake className="w-4 h-4 text-cyan-400" />}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setFreezeModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-xs text-[#86948a] hover:text-white cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteFreeze}
+              disabled={savingFreeze}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer ${
+                freezeAction === "freeze" ? "bg-amber-500 text-[#050706]" : "bg-[#10b981] text-[#050706]"
+              }`}
+            >
+              {savingFreeze && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{freezeAction === "freeze" ? "Confirmar Freeze" : "Executar Unfreeze"}</span>
+            </button>
+          </>
+        }
+      >
+        <div className="text-xs text-[#bbcabf] space-y-4 font-['Geist']">
+          <p>
+            {freezeAction === "freeze" 
+              ? "Ao congelar o tempo do produto, todas as chaves ATIVAS terão seu status alterado para FROZEN e seus relógios paralisados."
+              : "Ao descongelar (unfreeze), o tempo em que o serviço esteve pausado é recalculado e somado à validade de cada chave."}
+          </p>
 
-            <div className="text-xs text-[#bbcabf] space-y-4 font-['Geist']">
-              <p>
-                {freezeAction === "freeze" 
-                  ? "Ao congelar o tempo do produto, todas as chaves ATIVAS terão seu status alterado para FROZEN e seus relógios paralisados."
-                  : "Ao descongelar (unfreeze), o tempo em que o serviço esteve pausado é recalculado e somado à validade de cada chave."}
-              </p>
-
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">AÇÃO DESEJADA:</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFreezeAction("freeze")}
-                    className={`py-2 rounded-xl font-bold font-mono text-xs transition-all ${
-                      freezeAction === "freeze"
-                        ? "bg-amber-500 text-[#050706]"
-                        : "bg-[#050706] text-[#bbcabf] border border-white/10"
-                    }`}
-                  >
-                    CONGELAR (Freeze)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFreezeAction("unfreeze")}
-                    className={`py-2 rounded-xl font-bold font-mono text-xs transition-all ${
-                      freezeAction === "unfreeze"
-                        ? "bg-[#10b981] text-[#050706]"
-                        : "bg-[#050706] text-[#bbcabf] border border-white/10"
-                    }`}
-                  >
-                    DESCONGELAR (Unfreeze)
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">PRODUTO ALVO:</label>
-                <select
-                  value={selectedProductForFreeze}
-                  onChange={(e) => setSelectedProductForFreeze(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.status})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">MOTIVO / AVISO PÚBLICO:</label>
-                <input
-                  type="text"
-                  value={freezeReason}
-                  onChange={(e) => setFreezeReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white text-xs focus:outline-none focus:border-[#10b981]"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button onClick={() => setFreezeModalOpen(false)} className="px-4 py-2 text-xs text-[#86948a] cursor-pointer">
-                Cancelar
-              </button>
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">AÇÃO DESEJADA:</label>
+            <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={handleExecuteFreeze}
-                disabled={savingFreeze}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer ${
-                  freezeAction === "freeze" ? "bg-amber-500 text-[#050706]" : "bg-[#10b981] text-[#050706]"
+                type="button"
+                onClick={() => setFreezeAction("freeze")}
+                className={`py-2 rounded-xl font-bold font-mono text-xs transition-all ${
+                  freezeAction === "freeze"
+                    ? "bg-amber-500 text-[#050706]"
+                    : "bg-[#050706] text-[#bbcabf] border border-white/10"
                 }`}
               >
-                {savingFreeze && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>{freezeAction === "freeze" ? "Confirmar Freeze" : "Executar Unfreeze"}</span>
+                CONGELAR (Freeze)
+              </button>
+              <button
+                type="button"
+                onClick={() => setFreezeAction("unfreeze")}
+                className={`py-2 rounded-xl font-bold font-mono text-xs transition-all ${
+                  freezeAction === "unfreeze"
+                    ? "bg-[#10b981] text-[#050706]"
+                    : "bg-[#050706] text-[#bbcabf] border border-white/10"
+                }`}
+              >
+                DESCONGELAR (Unfreeze)
               </button>
             </div>
           </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">PRODUTO ALVO:</label>
+            <select
+              value={selectedProductForFreeze}
+              onChange={(e) => setSelectedProductForFreeze(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.status})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">MOTIVO / AVISO PÚBLICO:</label>
+            <input
+              type="text"
+              value={freezeReason}
+              onChange={(e) => setFreezeReason(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white text-xs focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
         </div>
-      )}
+      </AdminModal>
 
       {/* ==================================================== */}
       {/* MODAL 2: COMPENSAÇÃO DE TEMPO                        */}
       {/* ==================================================== */}
-      {compensateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="rounded-2xl bg-[#0b0f0d] max-w-md w-full p-6 border border-white/15 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-white/8">
-              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[#10b981]" />
-                <span>Compensação de Tempo em Massa</span>
-              </h3>
-              <button onClick={() => setCompensateModalOpen(false)} className="text-gray-500 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <AdminModal
+        isOpen={compensateModalOpen}
+        onClose={() => setCompensateModalOpen(false)}
+        title="Compensação de Tempo em Massa"
+        icon={<Clock className="w-4 h-4 text-[#10b981]" />}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCompensateModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-xs text-[#86948a] hover:text-white cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleExecuteCompensate}
+              disabled={savingCompensate}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] text-[#050706] flex items-center gap-1.5 cursor-pointer shadow-lg shadow-[#10b981]/25"
+            >
+              {savingCompensate && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Aplicar Compensação</span>
+            </button>
+          </>
+        }
+      >
+        <div className="text-xs text-[#bbcabf] space-y-4 font-['Geist']">
+          <p>Adicione horas ou dias extras diretamente a todas as licenças ativas como bonificação compensatória.</p>
+          
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">PRODUTO AFETADO:</label>
+            <select
+              value={selectedProductForCompensate}
+              onChange={(e) => setSelectedProductForCompensate(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+            >
+              <option value="all">TODOS OS PRODUTOS (Global)</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
 
-            <div className="text-xs text-[#bbcabf] space-y-4 font-['Geist']">
-              <p>Adicione horas ou dias extras diretamente a todas as licenças ativas como bonificação compensatória.</p>
-              
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">PRODUTO AFETADO:</label>
-                <select
-                  value={selectedProductForCompensate}
-                  onChange={(e) => setSelectedProductForCompensate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                >
-                  <option value="all">TODOS OS PRODUTOS (Global)</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">HORAS A ADICIONAR (+X):</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={compensateHours}
-                  onChange={(e) => setCompensateHours(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                />
-                <span className="text-[10px] text-[#86948a] block mt-1">Exemplo: 24 horas = +1 dia de validade para cada usuário com chave ativa.</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button onClick={() => setCompensateModalOpen(false)} className="px-4 py-2 text-xs text-[#86948a] cursor-pointer">
-                Cancelar
-              </button>
-              <button
-                onClick={handleExecuteCompensate}
-                disabled={savingCompensate}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] text-[#050706] flex items-center gap-1.5 cursor-pointer shadow-lg shadow-[#10b981]/25"
-              >
-                {savingCompensate && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Aplicar Compensação</span>
-              </button>
-            </div>
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">HORAS A ADICIONAR (+X):</label>
+            <input
+              type="number"
+              min="1"
+              value={compensateHours}
+              onChange={(e) => setCompensateHours(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+            />
+            <span className="text-[10px] text-[#86948a] block mt-1">Exemplo: 24 horas = +1 dia de validade para cada usuário com chave ativa.</span>
           </div>
         </div>
-      )}
+      </AdminModal>
 
       {/* ==================================================== */}
       {/* MODAL 3: IMPORTAÇÃO OU GERAÇÃO AUTOMÁTICA DE CHAVES  */}
       {/* ==================================================== */}
-      {importKeysModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="rounded-2xl bg-[#0b0f0d] max-w-md w-full p-6 border border-white/15 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-white/8">
-              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
-                <Key className="w-4 h-4 text-[#10b981]" />
-                <span>Gestão de Estoque de Chaves</span>
-              </h3>
-              <button onClick={() => setImportKeysModalOpen(false)} className="text-gray-500 hover:text-white cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
+      <AdminModal
+        isOpen={importKeysModalOpen}
+        onClose={() => setImportKeysModalOpen(false)}
+        title="Gestão de Estoque de Chaves"
+        icon={<Key className="w-4 h-4 text-[#10b981]" />}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setImportKeysModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-xs text-[#86948a] hover:text-white cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveKeys}
+              disabled={savingKeys}
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer ${
+                importMode === "manual" ? "bg-[#10b981] text-[#050706]" : "bg-purple-500 text-white"
+              }`}
+            >
+              {savingKeys && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{importMode === "manual" ? "Salvar no Estoque" : "Gerar e Salvar"}</span>
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs font-['Geist']">
+          {/* Seletor de Modo: Importação Manual vs Geração Automática */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#050706] border border-white/5 font-mono text-[11px]">
+            <button
+              type="button"
+              onClick={() => setImportMode("manual")}
+              className={`py-2 rounded-lg font-bold transition-all ${
+                importMode === "manual" ? "bg-[#10b981] text-[#050706]" : "text-[#86948a] hover:text-white"
+              }`}
+            >
+              Importar Manual (1 por linha)
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportMode("generate")}
+              className={`py-2 rounded-lg font-bold transition-all ${
+                importMode === "generate" ? "bg-purple-500 text-white" : "text-[#86948a] hover:text-white"
+              }`}
+            >
+              Gerar Auto (OVERCLOCK-XXXX)
+            </button>
+          </div>
+
+          {/* Seleção do Produto */}
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">PRODUTO ALVO:</label>
+            <select
+              value={selectedProductForImport}
+              onChange={(e) => setSelectedProductForImport(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+            >
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Seleção da Variante */}
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">VARIANTE / PLANO:</label>
+            <select
+              value={selectedVariantForImport}
+              onChange={(e) => setSelectedVariantForImport(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+            >
+              {products
+                .find((p) => p.id === selectedProductForImport)
+                ?.variants.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} (R$ {centsToBr(v.priceCents)}) - Estoque: {v.stockCount} un
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {importMode === "manual" ? (
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                LISTA DE CHAVES (UMA POR LINHA):
+              </label>
+              <textarea
+                rows={5}
+                value={batchKeysText}
+                onChange={(e) => setBatchKeysText(e.target.value)}
+                placeholder="OVERCLOCK-XXXX-XXXX-XXXX&#10;OVERCLOCK-YYYY-YYYY-YYYY"
+                className="w-full p-3 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
+              />
+              <span className="text-[10px] text-[#86948a] block mt-1">
+                Cada chave será salva no banco com status UNASSIGNED pronta para reserva atômica no checkout.
+              </span>
+            </div>
+          ) : (
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                QUANTIDADE DE CHAVES A GERAR:
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="500"
+                value={generateCount}
+                onChange={(e) => setGenerateCount(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+              />
+              <span className="text-[10px] text-[#86948a] block mt-1">
+                Chaves criptográficas no formato OVERCLOCK-XXXX-XXXX-XXXX serão geradas e injetadas no estoque.
+              </span>
+            </div>
+          )}
+        </div>
+      </AdminModal>
+
+      {/* ==================================================== */}
+      {/* MODAL NOVO: CADASTRO E EDIÇÃO DE CATEGORIA          */}
+      {/* ==================================================== */}
+      <AdminModal
+        isOpen={categoryModalOpen}
+        onClose={() => setCategoryModalOpen(false)}
+        title={editingCategoryId ? "Editar Categoria" : "+ Nova Categoria"}
+        icon={<FolderTree className="w-4 h-4" />}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCategoryModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-[#86948a] hover:text-white transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                const form = document.getElementById("category-form") as HTMLFormElement;
+                if (form) form.requestSubmit();
+              }}
+              disabled={savingCategory}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+            >
+              {savingCategory && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingCategoryId ? "Salvar Alterações" : "Salvar Categoria"}</span>
+            </button>
+          </>
+        }
+      >
+        <form id="category-form" onSubmit={handleSaveCategory} className="space-y-4 font-['Geist'] text-xs">
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">NOME DA CATEGORIA:</label>
+            <input
+              type="text"
+              required
+              value={categoryFormName}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCategoryFormName(val);
+                if (!editingCategoryId) {
+                  setCategoryFormSlug(slugify(val));
+                }
+              }}
+              placeholder="Ex: Utilitários"
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 font-bold text-white focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">SLUG (URL):</label>
+            <input
+              type="text"
+              required
+              value={categoryFormSlug}
+              onChange={(e) => setCategoryFormSlug(slugify(e.target.value))}
+              placeholder="Ex: utilitarios"
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 font-mono text-xs text-[#10b981] focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">DESCRIÇÃO (OPCIONAL):</label>
+            <input
+              type="text"
+              value={categoryFormDesc}
+              onChange={(e) => setCategoryFormDesc(e.target.value)}
+              placeholder="Ex: Spoofers e ferramentas de segurança"
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">ORDEM DE EXIBIÇÃO:</label>
+            <input
+              type="number"
+              value={categoryFormOrder}
+              onChange={(e) => setCategoryFormOrder(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+        </form>
+      </AdminModal>
+
+      {/* ==================================================== */}
+      {/* MODAL 4: CADASTRO E EDIÇÃO DE PRODUTO (REFATORADO)   */}
+      {/* ==================================================== */}
+      <AdminModal
+        isOpen={productModalOpen}
+        onClose={() => setProductModalOpen(false)}
+        title={editingProductId ? "Editar Produto" : "+ Cadastrar Novo Produto"}
+        icon={<Package className="w-4 h-4" />}
+        maxWidth="max-w-3xl"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setProductModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-[#86948a] hover:text-white transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                const form = document.getElementById("product-form") as HTMLFormElement;
+                if (form) form.requestSubmit();
+              }}
+              disabled={savingProduct}
+              className="px-6 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] shadow-lg shadow-[#10b981]/25 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              {savingProduct && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingProductId ? "Salvar Alterações" : "Cadastrar Software"}</span>
+            </button>
+          </>
+        }
+      >
+        <form id="product-form" onSubmit={handleSubmitProduct} className="space-y-4 text-xs font-['Geist']">
+          {/* Seção 1: Identificação Básica */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                NOME DO PRODUTO:
+              </label>
+              <input
+                type="text"
+                required
+                value={prodFormName}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProdFormName(val);
+                  if (!editingProductId || !prodFormSlugEdited) {
+                    setProdFormSlug(slugify(val));
+                  }
+                }}
+                placeholder="Ex: Apex Phantom Pro"
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+              />
             </div>
 
-            <div className="space-y-4 text-xs font-['Geist']">
-              {/* Seletor de Modo: Importação Manual vs Geração Automática */}
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[#050706] border border-white/5 font-mono text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setImportMode("manual")}
-                  className={`py-2 rounded-lg font-bold transition-all ${
-                    importMode === "manual" ? "bg-[#10b981] text-[#050706]" : "text-[#86948a] hover:text-white"
-                  }`}
-                >
-                  Importar Manual (1 por linha)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setImportMode("generate")}
-                  className={`py-2 rounded-lg font-bold transition-all ${
-                    importMode === "generate" ? "bg-purple-500 text-white" : "text-[#86948a] hover:text-white"
-                  }`}
-                >
-                  Gerar Auto (OVERCLOCK-XXXX)
-                </button>
-              </div>
-
-              {/* Seleção do Produto */}
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">PRODUTO ALVO:</label>
-                <select
-                  value={selectedProductForImport}
-                  onChange={(e) => setSelectedProductForImport(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Seleção da Variante */}
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">VARIANTE / PLANO:</label>
-                <select
-                  value={selectedVariantForImport}
-                  onChange={(e) => setSelectedVariantForImport(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                >
-                  {products
-                    .find((p) => p.id === selectedProductForImport)
-                    ?.variants.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name} (R$ {centsToBr(v.priceCents)}) - Estoque: {v.stockCount} un
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {importMode === "manual" ? (
-                <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    LISTA DE CHAVES (UMA POR LINHA):
-                  </label>
-                  <textarea
-                    rows={5}
-                    value={batchKeysText}
-                    onChange={(e) => setBatchKeysText(e.target.value)}
-                    placeholder="OVERCLOCK-XXXX-XXXX-XXXX&#10;OVERCLOCK-YYYY-YYYY-YYYY"
-                    className="w-full p-3 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
-                  />
-                  <span className="text-[10px] text-[#86948a] block mt-1">
-                    Cada chave será salva no banco com status UNASSIGNED pronta para reserva atômica no checkout.
-                  </span>
-                </div>
-              ) : (
-                <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    QUANTIDADE DE CHAVES A GERAR:
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="500"
-                    value={generateCount}
-                    onChange={(e) => setGenerateCount(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                  />
-                  <span className="text-[10px] text-[#86948a] block mt-1">
-                    Chaves criptográficas no formato OVERCLOCK-XXXX-XXXX-XXXX serão geradas e injetadas no estoque.
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button onClick={() => setImportKeysModalOpen(false)} className="px-4 py-2 text-xs text-[#86948a] cursor-pointer">
-                Cancelar
-              </button>
-              <button
-                onClick={handleSaveKeys}
-                disabled={savingKeys}
-                className={`px-5 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] flex items-center gap-1.5 cursor-pointer ${
-                  importMode === "manual" ? "bg-[#10b981] text-[#050706]" : "bg-purple-500 text-white"
-                }`}
-              >
-                {savingKeys && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>{importMode === "manual" ? "Salvar no Estoque" : "Gerar e Salvar"}</span>
-              </button>
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                SLUG ÚNICO (URL):
+              </label>
+              <input
+                type="text"
+                required
+                value={prodFormSlug}
+                onChange={(e) => {
+                  setProdFormSlugEdited(true);
+                  setProdFormSlug(slugify(e.target.value));
+                }}
+                onBlur={() => setProdFormSlug(slugify(prodFormSlug))}
+                placeholder="Ex: apex-phantom-pro"
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+              />
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ==================================================== */}
-      {/* MODAL 4: CADASTRO E EDIÇÃO DE PRODUTO                */}
-      {/* ==================================================== */}
-      {productModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-          <div className="rounded-2xl bg-[#0b0f0d] max-w-2xl w-full p-6 sm:p-8 border border-white/15 space-y-6 shadow-2xl relative my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-white/8">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-[#10b981]/15 text-[#10b981] flex items-center justify-center">
-                  <Package className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-['Space_Grotesk'] text-lg font-bold text-white">
-                    {editingProductId ? "Editar Produto" : "+ Cadastrar Novo Produto"}
-                  </h3>
-                  <span className="font-mono text-[10px] text-[#86948a]">
-                    Persistência 100% real no PostgreSQL via Prisma ORM.
-                  </span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setProductModalOpen(false)} 
-                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                CATEGORIA:
+              </label>
+              <select
+                value={prodFormCategory}
+                onChange={(e) => setProdFormCategory(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
               >
-                <X className="w-5 h-5" />
-              </button>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+                {categories.length === 0 && (
+                  <>
+                    <option value="Utilitários">Utilitários</option>
+                    <option value="FPS Tático">FPS Tático</option>
+                    <option value="Software">Software</option>
+                    <option value="Cheats">Cheats</option>
+                  </>
+                )}
+              </select>
             </div>
 
-            <form onSubmit={handleSubmitProduct} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1 text-xs font-['Geist']">
-              {/* Seção 1: Identificação Básica */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                STATUS OPERACIONAL:
+              </label>
+              <select
+                value={prodFormStatus}
+                onChange={(e) => setProdFormStatus(e.target.value as any)}
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+              >
+                <option value="ONLINE">ONLINE (Disponível)</option>
+                <option value="MAINTENANCE">MANUTENÇÃO (Freeze Time)</option>
+                <option value="OUT_OF_STOCK">ESGOTADO</option>
+                <option value="DISABLED">OCULTO / DESATIVADO</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Destaque na Home */}
+          <div className="p-3 rounded-xl bg-[#050706] border border-white/10 flex items-center justify-between">
+            <div>
+              <span className="text-white font-bold block text-xs">Exibir em Destaque na Home (isFeatured)</span>
+              <span className="text-[#86948a] text-[10px]">Quando ativado, o produto ganha destaque na vitrine inicial da loja pública.</span>
+            </div>
+            <input
+              type="checkbox"
+              checked={prodFormIsFeatured}
+              onChange={(e) => setProdFormIsFeatured(e.target.checked)}
+              className="w-4 h-4 accent-[#10b981] rounded cursor-pointer"
+            />
+          </div>
+
+          {/* Tagline e Descrição */}
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+              TAGLINE / SUBTÍTULO RESUMIDO:
+            </label>
+            <input
+              type="text"
+              required
+              value={prodFormTagline}
+              onChange={(e) => setProdFormTagline(e.target.value)}
+              placeholder="Ex: O padrão definitivo em visibilidade e previsão tática com driver Ring-0."
+              className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white text-xs focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+              DESCRIÇÃO COMPLETA &amp; ARQUITETURA:
+            </label>
+            <textarea
+              rows={3}
+              value={prodFormDesc}
+              onChange={(e) => setProdFormDesc(e.target.value)}
+              placeholder="Descreva detalhes de funcionamento, compatibilidade de hardware, e proteções streamproof."
+              className="w-full p-3 rounded-xl bg-[#050706] border border-white/10 text-white text-xs resize-none focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          {/* Mídia: Vídeo & Imagens */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                URL DO VÍDEO (EMBED OU MP4):
+              </label>
+              <input
+                type="url"
+                value={prodFormVideo}
+                onChange={(e) => setProdFormVideo(e.target.value)}
+                placeholder="https://www.youtube.com/embed/..."
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+                CARGO DISCORD (ROLE ID):
+              </label>
+              <input
+                type="text"
+                value={prodFormDiscordRole}
+                onChange={(e) => setProdFormDiscordRole(e.target.value)}
+                placeholder="Ex: 118928374928173829"
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[#86948a] font-mono text-[11px] block mb-1">
+              URLS DAS IMAGENS / SCREENSHOTS (1 POR LINHA):
+            </label>
+            <textarea
+              rows={2}
+              value={prodFormImages}
+              onChange={(e) => setProdFormImages(e.target.value)}
+              placeholder="https://images.unsplash.com/photo-1&#10;https://images.unsplash.com/photo-2"
+              className="w-full p-3 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          {/* ==================================================== */}
+          {/* SEÇÃO TÉCNICA: CONTEÚDO DAS 3 ABAS DE /products/[slug] */}
+          {/* ==================================================== */}
+          <div className="p-4 rounded-xl bg-[#101412] border border-white/8 space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-white/5">
+              <FileText className="w-4 h-4 text-[#10b981]" />
+              <span className="font-['Space_Grotesk'] text-xs font-bold text-white uppercase tracking-wider">
+                Abas Técnicas Exibidas na Página do Produto (/products/[slug])
+              </span>
+            </div>
+
+            {/* ABA 1: VISÃO GERAL & RECURSOS */}
+            <div className="space-y-1.5">
+              <label className="text-[#10b981] font-mono text-[11px] font-bold block">
+                1. VISÃO GERAL &amp; RECURSOS DESTACADOS (1 por linha):
+              </label>
+              <textarea
+                rows={3}
+                value={prodFormFeatures}
+                onChange={(e) => setProdFormFeatures(e.target.value)}
+                placeholder="Injeção segura Ring-0 indetectável&#10;Proteção contra memory scans&#10;Autoatendimento de HWID&#10;Suporte Dedicado no Discord"
+                className="w-full p-2.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
+              />
+              <span className="text-[10px] text-[#86948a] block">
+                Cada linha será exibida como um card com ícone de verificação verde na aba Visão Geral.
+              </span>
+            </div>
+
+            {/* ABA 2: REQUISITOS DO SISTEMA */}
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <label className="text-[#10b981] font-mono text-[11px] font-bold block">
+                2. REQUISITOS DO SISTEMA &amp; MATRIZ DE COMPATIBILIDADE:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    NOME DO PRODUTO:
-                  </label>
+                  <label className="text-[#86948a] font-mono text-[10px] block mb-1">SISTEMA OPERACIONAL:</label>
                   <input
                     type="text"
-                    required
-                    value={prodFormName}
-                    onChange={(e) => {
-                      setProdFormName(e.target.value);
-                      if (!editingProductId) {
-                        setProdFormSlug(
-                          e.target.value
-                            .toLowerCase()
-                            .replace(/[^\w\s-]/g, "")
-                            .replace(/\s+/g, "-")
-                        );
-                      }
-                    }}
-                    placeholder="Ex: Apex Phantom Pro"
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+                    value={prodFormSpecOS}
+                    onChange={(e) => setProdFormSpecOS(e.target.value)}
+                    placeholder="Ex: Windows 10 / 11 (x64)"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
                   />
                 </div>
-
                 <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    SLUG ÚNICO (URL):
-                  </label>
+                  <label className="text-[#86948a] font-mono text-[10px] block mb-1">PROCESSADORES:</label>
                   <input
                     type="text"
-                    required
-                    value={prodFormSlug}
-                    onChange={(e) => setProdFormSlug(e.target.value)}
-                    placeholder="Ex: apex-phantom-pro"
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+                    value={prodFormSpecCPU}
+                    onChange={(e) => setProdFormSpecCPU(e.target.value)}
+                    placeholder="Ex: Intel & AMD (Todas as gerações)"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    CATEGORIA:
-                  </label>
-                  <select
-                    value={prodFormCategory}
-                    onChange={(e) => setProdFormCategory(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                  >
-                    <option value="Battle Royale">Battle Royale</option>
-                    <option value="FPS Tático">FPS Tático</option>
-                    <option value="Competitivo">Competitivo</option>
-                    <option value="Utilitários">Utilitários / HWID</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    STATUS OPERACIONAL:
-                  </label>
-                  <select
-                    value={prodFormStatus}
-                    onChange={(e) => setProdFormStatus(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                  >
-                    <option value="ONLINE">ONLINE (Disponível)</option>
-                    <option value="MAINTENANCE">MANUTENÇÃO (Freeze Time)</option>
-                    <option value="OUT_OF_STOCK">ESGOTADO</option>
-                    <option value="DISABLED">OCULTO / DESATIVADO</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Destaque na Home */}
-              <div className="p-3 rounded-xl bg-[#050706] border border-white/10 flex items-center justify-between">
-                <div>
-                  <span className="text-white font-bold block text-xs">Exibir em Destaque na Home (isFeatured)</span>
-                  <span className="text-[#86948a] text-[10px]">Quando ativado, o produto ganha destaque na vitrine inicial da loja pública.</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={prodFormIsFeatured}
-                  onChange={(e) => setProdFormIsFeatured(e.target.checked)}
-                  className="w-4 h-4 accent-[#10b981] rounded cursor-pointer"
-                />
-              </div>
-
-              {/* Tagline e Descrição */}
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                  TAGLINE / SUBTÍTULO RESUMIDO:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={prodFormTagline}
-                  onChange={(e) => setProdFormTagline(e.target.value)}
-                  placeholder="Ex: O padrão definitivo em visibilidade e previsão tática com driver Ring-0."
-                  className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white text-xs focus:outline-none focus:border-[#10b981]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                  DESCRIÇÃO COMPLETA &amp; ARQUITETURA:
-                </label>
-                <textarea
-                  rows={3}
-                  value={prodFormDesc}
-                  onChange={(e) => setProdFormDesc(e.target.value)}
-                  placeholder="Descreva detalhes de funcionamento, compatibilidade de hardware, e proteções streamproof."
-                  className="w-full p-3 rounded-xl bg-[#050706] border border-white/10 text-white text-xs resize-none focus:outline-none focus:border-[#10b981]"
-                />
-              </div>
-
-              {/* Mídia: Vídeo & Imagens */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    URL DO VÍDEO (EMBED OU MP4):
-                  </label>
-                  <input
-                    type="url"
-                    value={prodFormVideo}
-                    onChange={(e) => setProdFormVideo(e.target.value)}
-                    placeholder="https://www.youtube.com/embed/..."
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                    CARGO DISCORD (ROLE ID):
-                  </label>
+                  <label className="text-[#86948a] font-mono text-[10px] block mb-1">ANTI-CHEAT ALVO:</label>
                   <input
                     type="text"
-                    value={prodFormDiscordRole}
-                    onChange={(e) => setProdFormDiscordRole(e.target.value)}
-                    placeholder="Ex: 118928374928173829"
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-[#10b981]"
+                    value={prodFormSpecAnticheat}
+                    onChange={(e) => setProdFormSpecAnticheat(e.target.value)}
+                    placeholder="Ex: Kernel Driver Shield / EAC / BattleEye"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#86948a] font-mono text-[10px] block mb-1">MODO STREAMPROOF:</label>
+                  <input
+                    type="text"
+                    value={prodFormSpecStreamProof}
+                    onChange={(e) => setProdFormSpecStreamProof(e.target.value)}
+                    placeholder="Ex: 100% Nativo (OBS, Discord & Medal)"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
                   />
                 </div>
               </div>
+            </div>
 
+            {/* ABA 3: CHANGELOGS & VERSÕES */}
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <label className="text-[#10b981] font-mono text-[11px] font-bold block">
+                3. CHANGELOGS, ATUALIZAÇÕES &amp; VERSÕES:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[#86948a] font-mono text-[10px] block mb-1">VERSÃO ATUAL DO SOFTWARE:</label>
+                  <input
+                    type="text"
+                    value={prodFormCurrentVersion}
+                    onChange={(e) => setProdFormCurrentVersion(e.target.value)}
+                    placeholder="Ex: v2.4.0"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[#86948a] font-mono text-[10px] block mb-1">TÍTULO DA NOTA DE ATUALIZAÇÃO (OPCIONAL):</label>
+                  <input
+                    type="text"
+                    value={prodFormChangelogTitle}
+                    onChange={(e) => setProdFormChangelogTitle(e.target.value)}
+                    placeholder="Ex: Hotfix de Estabilidade e Offsets"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
+                  />
+                </div>
+              </div>
               <div>
-                <label className="text-[#86948a] font-mono text-[11px] block mb-1">
-                  URLS DAS IMAGENS / SCREENSHOTS (1 POR LINHA):
-                </label>
+                <label className="text-[#86948a] font-mono text-[10px] block mb-1">MUDANÇAS RECENTES DO PATCH (1 por linha):</label>
                 <textarea
                   rows={2}
-                  value={prodFormImages}
-                  onChange={(e) => setProdFormImages(e.target.value)}
-                  placeholder="https://images.unsplash.com/photo-1&#10;https://images.unsplash.com/photo-2"
-                  className="w-full p-3 rounded-xl bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
+                  value={prodFormChangelogChanges}
+                  onChange={(e) => setProdFormChangelogChanges(e.target.value)}
+                  placeholder="Offsets atualizados para a nova season&#10;Melhoria na injeção do kernel driver&#10;Correção de latência no ESP"
+                  className="w-full p-2.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
                 />
               </div>
-
-              {/* ==================================================== */}
-              {/* SEÇÃO TÉCNICA: CONTEÚDO DAS 3 ABAS DE /products/[slug] */}
-              {/* ==================================================== */}
-              <div className="p-4 rounded-xl bg-[#101412] border border-white/8 space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-white/5">
-                  <FileText className="w-4 h-4 text-[#10b981]" />
-                  <span className="font-['Space_Grotesk'] text-xs font-bold text-white uppercase tracking-wider">
-                    Abas Técnicas Exibidas na Página do Produto (/products/[slug])
-                  </span>
-                </div>
-
-                {/* ABA 1: VISÃO GERAL & RECURSOS */}
-                <div className="space-y-1.5">
-                  <label className="text-[#10b981] font-mono text-[11px] font-bold block">
-                    1. VISÃO GERAL &amp; RECURSOS DESTACADOS (1 por linha):
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={prodFormFeatures}
-                    onChange={(e) => setProdFormFeatures(e.target.value)}
-                    placeholder="Injeção segura Ring-0 indetectável&#10;Proteção contra memory scans&#10;Autoatendimento de HWID&#10;Suporte Dedicado no Discord"
-                    className="w-full p-2.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
-                  />
-                  <span className="text-[10px] text-[#86948a] block">
-                    Cada linha será exibida como um card com ícone de verificação verde na aba Visão Geral.
-                  </span>
-                </div>
-
-                {/* ABA 2: REQUISITOS DO SISTEMA */}
-                <div className="space-y-2 pt-2 border-t border-white/5">
-                  <label className="text-[#10b981] font-mono text-[11px] font-bold block">
-                    2. REQUISITOS DO SISTEMA &amp; MATRIZ DE COMPATIBILIDADE:
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[#86948a] font-mono text-[10px] block mb-1">SISTEMA OPERACIONAL:</label>
-                      <input
-                        type="text"
-                        value={prodFormSpecOS}
-                        onChange={(e) => setProdFormSpecOS(e.target.value)}
-                        placeholder="Ex: Windows 10 / 11 (x64)"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[#86948a] font-mono text-[10px] block mb-1">PROCESSADORES:</label>
-                      <input
-                        type="text"
-                        value={prodFormSpecCPU}
-                        onChange={(e) => setProdFormSpecCPU(e.target.value)}
-                        placeholder="Ex: Intel & AMD (Todas as gerações)"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[#86948a] font-mono text-[10px] block mb-1">ANTI-CHEAT ALVO:</label>
-                      <input
-                        type="text"
-                        value={prodFormSpecAnticheat}
-                        onChange={(e) => setProdFormSpecAnticheat(e.target.value)}
-                        placeholder="Ex: Kernel Driver Shield / EAC / BattleEye"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[#86948a] font-mono text-[10px] block mb-1">MODO STREAMPROOF:</label>
-                      <input
-                        type="text"
-                        value={prodFormSpecStreamProof}
-                        onChange={(e) => setProdFormSpecStreamProof(e.target.value)}
-                        placeholder="Ex: 100% Nativo (OBS, Discord & Medal)"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* ABA 3: CHANGELOGS & VERSÕES */}
-                <div className="space-y-2 pt-2 border-t border-white/5">
-                  <label className="text-[#10b981] font-mono text-[11px] font-bold block">
-                    3. CHANGELOGS, ATUALIZAÇÕES &amp; VERSÕES:
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[#86948a] font-mono text-[10px] block mb-1">VERSÃO ATUAL DO SOFTWARE:</label>
-                      <input
-                        type="text"
-                        value={prodFormCurrentVersion}
-                        onChange={(e) => setProdFormCurrentVersion(e.target.value)}
-                        placeholder="Ex: v2.4.0"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[#86948a] font-mono text-[10px] block mb-1">TÍTULO DA NOTA DE ATUALIZAÇÃO (OPCIONAL):</label>
-                      <input
-                        type="text"
-                        value={prodFormChangelogTitle}
-                        onChange={(e) => setProdFormChangelogTitle(e.target.value)}
-                        placeholder="Ex: Hotfix de Estabilidade e Offsets"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[#86948a] font-mono text-[10px] block mb-1">MUDANÇAS RECENTES DO PATCH (1 por linha):</label>
-                    <textarea
-                      rows={2}
-                      value={prodFormChangelogChanges}
-                      onChange={(e) => setProdFormChangelogChanges(e.target.value)}
-                      placeholder="Offsets atualizados para a nova season&#10;Melhoria na injeção do kernel driver&#10;Correção de latência no ESP"
-                      className="w-full p-2.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs resize-none focus:outline-none focus:border-[#10b981]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Variantes de Preço */}
-              <div className="p-3.5 rounded-xl bg-[#101412] border border-white/8 space-y-2">
-                <span className="font-mono text-[11px] text-[#10b981] font-bold uppercase block">
-                  Precificação das Variantes de Acesso (Salvas em centavos no Postgres):
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div>
-                    <label className="text-[#86948a] font-mono text-[10px] block mb-1">PASSE 24H (R$):</label>
-                    <input
-                      type="text"
-                      value={prodFormDailyPrice}
-                      onChange={(e) => setProdFormDailyPrice(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[#86948a] font-mono text-[10px] block mb-1">7 DIAS (R$):</label>
-                    <input
-                      type="text"
-                      value={prodFormWeeklyPrice}
-                      onChange={(e) => setProdFormWeeklyPrice(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[#86948a] font-mono text-[10px] block mb-1">30 DIAS (R$):</label>
-                    <input
-                      type="text"
-                      value={prodFormMonthlyPrice}
-                      onChange={(e) => setProdFormMonthlyPrice(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[#86948a] font-mono text-[10px] block mb-1">LIFETIME (R$):</label>
-                    <input
-                      type="text"
-                      value={prodFormLifetimePrice}
-                      onChange={(e) => setProdFormLifetimePrice(e.target.value)}
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-[#050706] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Botões de Ação do Modal */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/8">
-                <button
-                  type="button"
-                  onClick={() => setProductModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-[#86948a] hover:text-white transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingProduct}
-                  className="px-6 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] shadow-lg shadow-[#10b981]/25 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  {savingProduct && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{editingProductId ? "Salvar Alterações" : "Cadastrar Software"}</span>
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+
+          {/* ==================================================== */}
+          {/* SEÇÃO DE VARIANTES FLEXÍVEIS (USO ÚNICO / LIFETIME / DIAS) */}
+          {/* ==================================================== */}
+          <div className="p-4 rounded-xl bg-[#101412] border border-white/8 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-white/5">
+              <div>
+                <span className="font-mono text-[11px] text-[#10b981] font-bold uppercase block">
+                  Planos &amp; Variantes de Acesso:
+                </span>
+                <span className="text-[#86948a] text-[10px]">
+                  Configure planos por Uso Único (sem expiração de dias), Vitalício (Lifetime) ou por Duração (dias/horas).
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setProdFormVariants((prev) => [
+                    ...prev,
+                    {
+                      name: "Passe 7 Dias",
+                      durationType: "DAYS",
+                      durationValue: 7,
+                      priceBrl: "79,90",
+                      compareAtPriceBrl: "",
+                      isActive: true,
+                    },
+                  ]);
+                }}
+                className="px-2.5 py-1.5 rounded-lg bg-[#10b981]/15 text-[#10b981] hover:bg-[#10b981]/25 font-bold font-['Space_Grotesk'] text-xs flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Adicionar Variante</span>
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {prodFormVariants.map((v, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-[#050706] border border-white/10 space-y-2.5 text-xs font-mono"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[#86948a] text-[10px] font-bold">
+                      VARIANTE #{idx + 1}
+                    </span>
+
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-[10px] text-[#bbcabf] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={v.isActive}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setProdFormVariants((prev) =>
+                              prev.map((item, i) => (i === idx ? { ...item, isActive: checked } : item))
+                            );
+                          }}
+                          className="accent-[#10b981]"
+                        />
+                        <span>Ativa</span>
+                      </label>
+
+                      {prodFormVariants.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProdFormVariants((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          title="Remover variante"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    {/* Tipo de Duração */}
+                    <div className="sm:col-span-4">
+                      <label className="text-[#86948a] text-[10px] block mb-1">TIPO DE ACESSO:</label>
+                      <select
+                        value={v.durationType}
+                        onChange={(e) => {
+                          const newType = e.target.value as FormVariant["durationType"];
+                          let defaultName = v.name;
+                          if (newType === "ONE_TIME") defaultName = "Uso Único";
+                          else if (newType === "LIFETIME") defaultName = "Licença Vitalícia (Lifetime)";
+                          else if (newType === "DAYS" && (defaultName.includes("Uso Único") || defaultName.includes("Vitalícia"))) defaultName = "Passe 7 Dias";
+
+                          setProdFormVariants((prev) =>
+                            prev.map((item, i) =>
+                              i === idx
+                                ? {
+                                    ...item,
+                                    durationType: newType,
+                                    name: defaultName,
+                                    durationValue: newType === "DAYS" ? (item.durationValue || 7) : newType === "HOURS" ? (item.durationValue || 24) : 0,
+                                  }
+                                : item
+                            )
+                          );
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#0b0f0d] border border-white/10 text-white font-mono text-xs focus:border-[#10b981] focus:outline-none"
+                      >
+                        <option value="ONE_TIME">Uso Único (One-Time)</option>
+                        <option value="LIFETIME">Vitalício (Lifetime)</option>
+                        <option value="DAYS">Por Dias (Days)</option>
+                        <option value="HOURS">Por Horas (Hours)</option>
+                      </select>
+                    </div>
+
+                    {/* Nome Exibido */}
+                    <div className="sm:col-span-4">
+                      <label className="text-[#86948a] text-[10px] block mb-1">NOME DO PLANO:</label>
+                      <input
+                        type="text"
+                        required
+                        value={v.name}
+                        onChange={(e) => {
+                          const newName = e.target.value;
+                          setProdFormVariants((prev) =>
+                            prev.map((item, i) => (i === idx ? { ...item, name: newName } : item))
+                          );
+                        }}
+                        placeholder="Ex: Uso Único / Vitalício"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#0b0f0d] border border-white/10 text-white font-sans text-xs focus:border-[#10b981] focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Duração se for dias ou horas */}
+                    <div className="sm:col-span-2">
+                      <label className="text-[#86948a] text-[10px] block mb-1">
+                        {v.durationType === "DAYS" ? "DIAS:" : v.durationType === "HOURS" ? "HORAS:" : "DURAÇÃO:"}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        disabled={v.durationType === "ONE_TIME" || v.durationType === "LIFETIME"}
+                        value={v.durationType === "ONE_TIME" || v.durationType === "LIFETIME" ? "0" : v.durationValue}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setProdFormVariants((prev) =>
+                            prev.map((item, i) => (i === idx ? { ...item, durationValue: val } : item))
+                          );
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#0b0f0d] border border-white/10 text-white font-mono text-xs disabled:opacity-40 focus:border-[#10b981] focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Preço R$ */}
+                    <div className="sm:col-span-2">
+                      <label className="text-[#86948a] text-[10px] block mb-1">PREÇO (R$):</label>
+                      <input
+                        type="text"
+                        required
+                        value={v.priceBrl}
+                        onChange={(e) => {
+                          const p = e.target.value;
+                          setProdFormVariants((prev) =>
+                            prev.map((item, i) => (i === idx ? { ...item, priceBrl: p } : item))
+                          );
+                        }}
+                        placeholder="149,90"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#0b0f0d] border border-white/10 text-[#10b981] font-bold font-mono text-xs focus:border-[#10b981] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </form>
+      </AdminModal>
       {/* ==================================================== */}
       {/* MODAL 5: NOVO CUPOM                                  */}
       {/* ==================================================== */}
-      {couponModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="rounded-2xl bg-[#0b0f0d] max-w-md w-full p-6 border border-white/15 space-y-5 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-white/8">
-              <h3 className="font-['Space_Grotesk'] text-base font-bold text-white flex items-center gap-2">
-                <Ticket className="w-4 h-4 text-[#10b981]" />
-                <span>{editingCouponId ? "Editar Cupom de Desconto" : "Criar Novo Cupom de Desconto"}</span>
-              </h3>
-              <button
-                onClick={() => setCouponModalOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+      <AdminModal
+        isOpen={couponModalOpen}
+        onClose={() => setCouponModalOpen(false)}
+        title={editingCouponId ? "Editar Cupom de Desconto" : "Criar Novo Cupom de Desconto"}
+        icon={<Ticket className="w-4 h-4 text-[#10b981]" />}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCouponModalOpen(false)}
+              className="px-4 py-2 text-[#86948a] hover:text-white cursor-pointer text-xs"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="coupon-form"
+              disabled={savingCoupon}
+              className="px-5 py-2.5 rounded-xl font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] transition-colors flex items-center gap-1.5 cursor-pointer shadow-md text-xs"
+            >
+              {savingCoupon && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>{editingCouponId ? "Salvar Alterações" : "Salvar Cupom no PostgreSQL"}</span>
+            </button>
+          </>
+        }
+      >
+        <form id="coupon-form" onSubmit={handleCreateCoupon} className="space-y-4 font-['Geist'] text-xs">
+          <div>
+            <label className="text-[#86948a] font-mono block mb-1">CÓDIGO DO CUPOM:</label>
+            <input
+              type="text"
+              required
+              value={couponFormCode}
+              onChange={(e) => setCouponFormCode(e.target.value.toUpperCase())}
+              placeholder="Ex: PROMO20 ou OVERCLOCK10"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 font-mono text-xs uppercase font-bold text-[#10b981] tracking-wider focus:outline-none focus:border-[#10b981]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono block mb-1">TIPO DE DESCONTO:</label>
+              <select
+                value={couponFormType}
+                onChange={(e) => setCouponFormType(e.target.value as any)}
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono"
               >
-                <X className="w-5 h-5" />
-              </button>
+                <option value="PERCENT">Percentual (%)</option>
+                <option value="FIXED">Fixo em Reais (R$)</option>
+              </select>
             </div>
 
-            <form onSubmit={handleCreateCoupon} className="space-y-4 font-['Geist'] text-xs">
-              <div>
-                <label className="text-[#86948a] font-mono block mb-1">CÓDIGO DO CUPOM:</label>
-                <input
-                  type="text"
-                  required
-                  value={couponFormCode}
-                  onChange={(e) => setCouponFormCode(e.target.value.toUpperCase())}
-                  placeholder="Ex: PROMO20 ou OVERCLOCK10"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 font-mono text-xs uppercase font-bold text-[#10b981] tracking-wider focus:outline-none focus:border-[#10b981]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[#86948a] font-mono block mb-1">TIPO DE DESCONTO:</label>
-                  <select
-                    value={couponFormType}
-                    onChange={(e) => setCouponFormType(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono"
-                  >
-                    <option value="PERCENT">Percentual (%)</option>
-                    <option value="FIXED">Fixo em Reais (R$)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[#86948a] font-mono block mb-1">
-                    {couponFormType === "PERCENT" ? "PORCENTAGEM (%):" : "VALOR (R$):"}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={couponFormValue}
-                    onChange={(e) => setCouponFormValue(e.target.value)}
-                    placeholder={couponFormType === "PERCENT" ? "Ex: 20" : "Ex: 30,00"}
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[#86948a] font-mono block mb-1">LIMITE DE USOS (OPCIONAL):</label>
-                  <input
-                    type="number"
-                    value={couponFormMaxUses}
-                    onChange={(e) => setCouponFormMaxUses(e.target.value)}
-                    placeholder="Ex: 50 (Vazio = Ilimitado)"
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[#86948a] font-mono block mb-1">PEDIDO MÍNIMO (R$):</label>
-                  <input
-                    type="text"
-                    value={couponFormMinAmount}
-                    onChange={(e) => setCouponFormMinAmount(e.target.value)}
-                    placeholder="Ex: 50,00 (Vazio = 0)"
-                    className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/8">
-                <button
-                  type="button"
-                  onClick={() => setCouponModalOpen(false)}
-                  className="px-4 py-2 text-[#86948a] hover:text-white cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingCoupon}
-                  className="px-5 py-2.5 rounded-xl font-bold font-['Space_Grotesk'] bg-[#10b981] hover:bg-[#34d399] text-[#050706] transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  {savingCoupon && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{editingCouponId ? "Salvar Alterações" : "Salvar Cupom no PostgreSQL"}</span>
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="text-[#86948a] font-mono block mb-1">
+                {couponFormType === "PERCENT" ? "PORCENTAGEM (%):" : "VALOR (R$):"}
+              </label>
+              <input
+                type="text"
+                required
+                value={couponFormValue}
+                onChange={(e) => setCouponFormValue(e.target.value)}
+                placeholder={couponFormType === "PERCENT" ? "Ex: 20" : "Ex: 30,00"}
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono font-bold"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono block mb-1">LIMITE DE USOS (OPCIONAL):</label>
+              <input
+                type="number"
+                value={couponFormMaxUses}
+                onChange={(e) => setCouponFormMaxUses(e.target.value)}
+                placeholder="Ex: 50 (Vazio = Ilimitado)"
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-[#86948a] font-mono block mb-1">PEDIDO MÍNIMO (R$):</label>
+              <input
+                type="text"
+                value={couponFormMinAmount}
+                onChange={(e) => setCouponFormMinAmount(e.target.value)}
+                placeholder="Ex: 50,00 (Vazio = 0)"
+                className="w-full px-3 py-2 rounded-xl bg-[#050706] border border-white/10 text-white font-mono"
+              />
+            </div>
+          </div>
+        </form>
+      </AdminModal>
 
       {/* MODAL: ATRIBUIR LICENÇA SEM PAGAMENTO (SORTEIO / BRINDE / PROMOÇÃO) */}
-      {grantFreeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-lg rounded-3xl bg-[#0b0f0d] border border-purple-500/30 p-6 sm:p-8 space-y-6 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-4 border-b border-white/8">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
-                  <Gift className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-['Space_Grotesk'] text-lg font-bold text-white">
-                    Atribuir Licença Sem Pagamento
-                  </h3>
-                  <p className="text-xs text-[#86948a]">
-                    Conceda acesso a software para sorteios, testes de parceiros ou cortesia.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGrantFreeModalOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+      <AdminModal
+        isOpen={grantFreeModalOpen}
+        onClose={() => setGrantFreeModalOpen(false)}
+        title="Atribuir Licença Sem Pagamento"
+        icon={<Gift className="w-5 h-5 text-purple-400" />}
+        maxWidth="max-w-lg"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setGrantFreeModalOpen(false)}
+              className="px-4 py-2 text-[#86948a] hover:text-white cursor-pointer text-xs"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="grant-free-form"
+              disabled={grantingFreeLicense}
+              className="px-5 py-2.5 rounded-xl font-bold font-['Space_Grotesk'] bg-purple-600 hover:bg-purple-500 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-600/30 text-xs"
+            >
+              {grantingFreeLicense && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>Conceder Licença</span>
+            </button>
+          </>
+        }
+      >
+        <form id="grant-free-form" onSubmit={handleGrantFreeLicense} className="space-y-4 text-xs font-['Geist']">
+          <div>
+            <label className="text-[#86948a] font-mono block mb-1">CLIENTE DESTINATÁRIO:</label>
+            <select
+              value={grantFreeUserId}
+              onChange={(e) => setGrantFreeUserId(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+              required
+            >
+              <option value="">Selecione um cliente cadastrado...</option>
+              {usersList.map((u) => (
+                <option key={u.id} value={u.id}>
+                  @{u.username} — {u.email} ({u.fullName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[#86948a] font-mono block mb-1">PRODUTO / SOFTWARE:</label>
+              <select
+                value={grantFreeProductId}
+                onChange={(e) => {
+                  setGrantFreeProductId(e.target.value);
+                  const prod = products.find((p) => p.id === e.target.value);
+                  if (prod && prod.variants.length > 0) {
+                    setGrantFreeVariantId(prod.variants[0].id);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+                required
               >
-                <X className="w-5 h-5" />
-              </button>
+                <option value="">Selecione o produto...</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
             </div>
 
-            <form onSubmit={handleGrantFreeLicense} className="space-y-4 text-xs font-['Geist']">
-              <div>
-                <label className="text-[#86948a] font-mono block mb-1">CLIENTE DESTINATÁRIO:</label>
-                <select
-                  value={grantFreeUserId}
-                  onChange={(e) => setGrantFreeUserId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
-                  required
-                >
-                  <option value="">Selecione um cliente cadastrado...</option>
-                  {usersList.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      @{u.username} — {u.email} ({u.fullName})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[#86948a] font-mono block mb-1">PRODUTO / SOFTWARE:</label>
-                  <select
-                    value={grantFreeProductId}
-                    onChange={(e) => {
-                      setGrantFreeProductId(e.target.value);
-                      const prod = products.find((p) => p.id === e.target.value);
-                      if (prod && prod.variants.length > 0) {
-                        setGrantFreeVariantId(prod.variants[0].id);
-                      }
-                    }}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
-                    required
-                  >
-                    <option value="">Selecione o produto...</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[#86948a] font-mono block mb-1">PLANO / VARIANTE:</label>
-                  <select
-                    value={grantFreeVariantId}
-                    onChange={(e) => setGrantFreeVariantId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
-                    required
-                  >
-                    {(() => {
-                      const prod = products.find((p) => p.id === grantFreeProductId);
-                      if (!prod || prod.variants.length === 0) {
-                        return <option value="">Selecione um produto antes</option>;
-                      }
-                      return prod.variants.map((v) => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                      ));
-                    })()}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[#86948a] font-mono block mb-1">MOTIVO / FINALIDADE (AUDITORIA):</label>
-                <input
-                  type="text"
-                  value={grantFreeReason}
-                  onChange={(e) => setGrantFreeReason(e.target.value)}
-                  placeholder="Ex: Sorteio no Discord oficial / Brinde da comunidade"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
-                  required
-                />
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/20 text-[#bbcabf] text-[11px] space-y-1">
-                <span className="font-bold text-purple-300 block">Como funciona a concessão gratuita:</span>
-                <p>• Uma chave atômica disponível no estoque será alocada para o cliente com status <strong>NOT_ACTIVATED</strong>.</p>
-                <p>• Um pedido auditado com valor R$ 0,00 será registrado e a licença aparecerá no <strong>/dashboard</strong> do cliente.</p>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/8">
-                <button
-                  type="button"
-                  onClick={() => setGrantFreeModalOpen(false)}
-                  className="px-4 py-2 text-[#86948a] hover:text-white cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={grantingFreeLicense}
-                  className="px-5 py-2.5 rounded-xl font-bold font-['Space_Grotesk'] bg-purple-600 hover:bg-purple-500 text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-600/30"
-                >
-                  {grantingFreeLicense && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Conceder Licença</span>
-                </button>
-              </div>
-            </form>
+            <div>
+              <label className="text-[#86948a] font-mono block mb-1">PLANO / VARIANTE:</label>
+              <select
+                value={grantFreeVariantId}
+                onChange={(e) => setGrantFreeVariantId(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+                required
+              >
+                {(() => {
+                  const prod = products.find((p) => p.id === grantFreeProductId);
+                  if (!prod || prod.variants.length === 0) {
+                    return <option value="">Selecione um produto antes</option>;
+                  }
+                  return prod.variants.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ));
+                })()}
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+
+          <div>
+            <label className="text-[#86948a] font-mono block mb-1">MOTIVO / FINALIDADE (AUDITORIA):</label>
+            <input
+              type="text"
+              value={grantFreeReason}
+              onChange={(e) => setGrantFreeReason(e.target.value)}
+              placeholder="Ex: Sorteio no Discord oficial / Brinde da comunidade"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#050706] border border-white/10 text-white font-mono focus:outline-none focus:border-purple-500"
+              required
+            />
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/20 text-[#bbcabf] text-[11px] space-y-1">
+            <span className="font-bold text-purple-300 block">Como funciona a concessão gratuita:</span>
+            <p>• Uma chave atômica disponível no estoque será alocada para o cliente com status <strong>NOT_ACTIVATED</strong>.</p>
+            <p>• Um pedido auditado com valor R$ 0,00 será registrado e a licença aparecerá no <strong>/dashboard</strong> do cliente.</p>
+          </div>
+        </form>
+      </AdminModal>
 
       {/* MODAL: FICHA CADASTRAL DO CLIENTE (HISTÓRICO & LICENÇAS) */}
-      {customerDetailsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-3xl rounded-3xl bg-[#0b0f0d] border border-white/10 p-6 sm:p-8 space-y-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-white/8">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#10b981]/20 text-[#10b981] font-bold text-sm flex items-center justify-center font-mono">
-                  {selectedCustomerDetails?.username ? selectedCustomerDetails.username.slice(0, 2).toUpperCase() : "US"}
-                </div>
-                <div>
-                  <h3 className="font-['Space_Grotesk'] text-lg font-bold text-white flex items-center gap-2">
-                    <span>@{selectedCustomerDetails?.username}</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                      selectedCustomerDetails?.isBanned
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                        : "bg-[#10b981]/15 text-[#10b981]"
-                    }`}>
-                      {selectedCustomerDetails?.isBanned ? "BANIDO" : "ATIVO"}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-white">
-                      {selectedCustomerDetails?.role}
-                    </span>
-                  </h3>
-                  <p className="text-xs text-[#86948a] font-['Geist']">
-                    {selectedCustomerDetails?.fullName} • {selectedCustomerDetails?.email}
-                  </p>
-                </div>
+      <AdminModal
+        isOpen={customerDetailsModalOpen}
+        onClose={() => setCustomerDetailsModalOpen(false)}
+        title={selectedCustomerDetails?.username ? `Cliente: @${selectedCustomerDetails.username}` : "Ficha do Cliente"}
+        icon={<UserCheck className="w-5 h-5 text-[#10b981]" />}
+        maxWidth="max-w-3xl"
+        footer={
+          selectedCustomerDetails ? (
+            <div className="w-full flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenGrantFree(selectedCustomerDetails.id)}
+                  className="px-4 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 border border-purple-500/40 font-bold font-['Space_Grotesk'] text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Gift className="w-4 h-4 text-purple-400" />
+                  <span>Atribuir Licença Sem Pagamento</span>
+                </button>
+
+                {selectedCustomerDetails.role !== "ADMIN" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleToggleBanUser(selectedCustomerDetails.id, selectedCustomerDetails.isBanned);
+                      loadCustomerDetails(selectedCustomerDetails.id);
+                    }}
+                    className={`px-4 py-2 rounded-xl font-bold font-['Space_Grotesk'] text-xs cursor-pointer ${
+                      selectedCustomerDetails.isBanned
+                        ? "bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30"
+                        : "bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                    }`}
+                  >
+                    {selectedCustomerDetails.isBanned ? "Desbanir Conta" : "Banir Usuário"}
+                  </button>
+                )}
               </div>
+
               <button
                 type="button"
                 onClick={() => setCustomerDetailsModalOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-mono text-xs cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Fechar
               </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCustomerDetailsModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-mono text-xs cursor-pointer"
+            >
+              Fechar
+            </button>
+          )
+        }
+      >
+        {selectedCustomerDetails && (
+          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#050706] border border-white/5 mb-6">
+            <div className="w-10 h-10 rounded-2xl bg-[#10b981]/20 text-[#10b981] font-bold text-sm flex items-center justify-center font-mono shrink-0">
+              {selectedCustomerDetails?.username ? selectedCustomerDetails.username.slice(0, 2).toUpperCase() : "US"}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-['Space_Grotesk'] font-bold text-white text-base">@{selectedCustomerDetails?.username}</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  selectedCustomerDetails?.isBanned
+                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                    : "bg-[#10b981]/15 text-[#10b981]"
+                }`}>
+                  {selectedCustomerDetails?.isBanned ? "BANIDO" : "ATIVO"}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/10 text-white">
+                  {selectedCustomerDetails?.role}
+                </span>
+              </div>
+              <p className="text-xs text-[#86948a] font-mono mt-0.5">
+                {selectedCustomerDetails?.fullName} • {selectedCustomerDetails?.email}
+              </p>
+            </div>
+          </div>
+        )}
 
             {loadingCustomerDetails ? (
               <div className="py-16 text-center text-[#86948a] font-mono text-xs flex flex-col items-center justify-center gap-2">
@@ -4283,46 +4786,9 @@ export default function AdminBackofficePage() {
                   )}
                 </div>
 
-                {/* 4. Ações Rápidas do Cliente */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/8">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleOpenGrantFree(selectedCustomerDetails.id)}
-                      className="px-4 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 border border-purple-500/40 font-bold font-['Space_Grotesk'] text-xs flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Gift className="w-4 h-4 text-purple-400" />
-                      <span>Atribuir Licença Sem Pagamento</span>
-                    </button>
-
-                    {selectedCustomerDetails.role !== "ADMIN" && (
-                      <button
-                        onClick={async () => {
-                          await handleToggleBanUser(selectedCustomerDetails.id, selectedCustomerDetails.isBanned);
-                          loadCustomerDetails(selectedCustomerDetails.id);
-                        }}
-                        className={`px-4 py-2 rounded-xl font-bold font-['Space_Grotesk'] text-xs cursor-pointer ${
-                          selectedCustomerDetails.isBanned
-                            ? "bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30"
-                            : "bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
-                        }`}
-                      >
-                        {selectedCustomerDetails.isBanned ? "Desbanir Conta" : "Banir Usuário"}
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => setCustomerDetailsModalOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-mono text-xs cursor-pointer"
-                  >
-                    Fechar
-                  </button>
-                </div>
               </div>
             ) : null}
-          </div>
-        </div>
-      )}
+      </AdminModal>
 
     </div>
   );

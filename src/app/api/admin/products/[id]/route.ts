@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
-import { ProductStatus, DurationType, ActorType, ServiceHealthStatus } from "@prisma/client";
+import { slugify } from "@/lib/slug";
+import { ProductStatus, DurationType, ActorType, ServiceHealthStatus, StockType } from "@prisma/client";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -114,12 +115,31 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       ? description 
       : existingProduct.fullDescription;
 
+    const cleanSlug = slugify(slug || name || existingProduct.slug);
+    if (!cleanSlug) {
+      return NextResponse.json({ error: "Slug inválido gerado para o produto." }, { status: 400 });
+    }
+
+    const duplicate = await prisma.product.findFirst({
+      where: {
+        id: { not: resolved.id },
+        slug: cleanSlug,
+      },
+    });
+
+    if (duplicate) {
+      return NextResponse.json(
+        { error: "Já existe outro produto cadastrado com este slug." },
+        { status: 409 }
+      );
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const prod = await tx.product.update({
         where: { id: resolved.id },
         data: {
           name: name ? name.trim() : existingProduct.name,
-          slug: slug ? slug.trim().toLowerCase() : existingProduct.slug,
+          slug: cleanSlug,
           category: category || existingProduct.category,
           shortDescription: finalShortDesc,
           fullDescription: finalFullDesc,
@@ -151,21 +171,74 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         });
       }
 
-      // Atualiza preços das variantes se fornecido (mesmo sem ID explícito do formulário)
-      if (Array.isArray(variants) && variants.length > 0) {
+      // Gestão Flexível de Variantes
+      if (Array.isArray(variants)) {
+        const receivedIds = new Set(variants.filter((v) => v.id).map((v) => v.id));
+
+        // Desativa ou remove variantes que não foram enviadas
+        for (const ev of existingProduct.variants) {
+          if (!receivedIds.has(ev.id)) {
+            const hasKeys = await tx.licenseKey.count({ where: { variantId: ev.id } });
+            if (hasKeys > 0) {
+              await tx.productVariant.update({
+                where: { id: ev.id },
+                data: { isActive: false },
+              });
+            } else {
+              await tx.productVariant.delete({
+                where: { id: ev.id },
+              });
+            }
+          }
+        }
+
+        // Atualiza ou cria as variantes recebidas
         for (let idx = 0; idx < variants.length; idx++) {
           const v = variants[idx];
-          const matchedVariant = v.id
-            ? existingProduct.variants.find((ev) => ev.id === v.id)
-            : existingProduct.variants[idx] || existingProduct.variants.find((ev) => ev.durationValue === v.durationHours);
+          let dType = v.durationType as DurationType;
+          let dVal = Number(v.durationValue ?? v.durationHours ?? 0);
 
-          if (matchedVariant) {
+          if (v.durationType === "ONE_TIME" || v.type === "ONE_TIME" || v.name?.toLowerCase().includes("uso único")) {
+            dType = DurationType.ONE_TIME;
+            dVal = 0;
+          } else if (v.durationType === "LIFETIME" || v.type === "LIFETIME" || v.isLifetime || v.name?.toLowerCase().includes("vitalíci") || v.name?.toLowerCase().includes("lifetime")) {
+            dType = DurationType.LIFETIME;
+            dVal = 0;
+          } else if (!dType) {
+            if (dVal >= 800000 || dVal === 0) {
+              dType = DurationType.LIFETIME;
+            } else if (dVal % 24 === 0 && dVal > 24) {
+              dType = DurationType.DAYS;
+            } else {
+              dType = DurationType.HOURS;
+            }
+          }
+
+          if (v.id && existingProduct.variants.some((ev) => ev.id === v.id)) {
             await tx.productVariant.update({
-              where: { id: matchedVariant.id },
+              where: { id: v.id },
               data: {
-                name: v.name || matchedVariant.name,
-                priceCents: Math.round(Number(v.priceCents)),
+                name: v.name || (dType === "ONE_TIME" ? "Uso Único" : dType === "LIFETIME" ? "Lifetime" : "Licença"),
+                durationValue: dVal,
+                durationType: dType,
+                priceCents: Math.round(Number(v.priceCents || 0)),
                 compareAtPriceCents: v.compareAtPriceCents ? Math.round(Number(v.compareAtPriceCents)) : null,
+                orderPriority: idx + 1,
+                isActive: v.isActive !== undefined ? Boolean(v.isActive) : true,
+              },
+            });
+          } else {
+            await tx.productVariant.create({
+              data: {
+                productId: resolved.id,
+                name: v.name || (dType === "ONE_TIME" ? "Uso Único" : dType === "LIFETIME" ? "Lifetime" : "Licença"),
+                durationValue: dVal,
+                durationType: dType,
+                priceCents: Math.round(Number(v.priceCents || 0)),
+                compareAtPriceCents: v.compareAtPriceCents ? Math.round(Number(v.compareAtPriceCents)) : null,
+                stockType: StockType.BATCH,
+                orderPriority: idx + 1,
+                isActive: v.isActive !== undefined ? Boolean(v.isActive) : true,
               },
             });
           }
@@ -183,9 +256,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
         await tx.statusService.updateMany({
           where: {
-            OR: [{ productId: resolved.id }, { slug: prod.slug }],
+            OR: [{ productId: resolved.id }, { slug: prod.slug }, { slug: existingProduct.slug }],
           },
-          data: { status: serviceStatus },
+          data: { status: serviceStatus, slug: cleanSlug },
         });
       }
 
@@ -199,6 +272,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           entityId: resolved.id,
           metadata: {
             productName: prod.name,
+            oldSlug: existingProduct.slug,
+            newSlug: cleanSlug,
             status: prod.status,
             variantsUpdated: variants?.length || 0,
           },
@@ -211,6 +286,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     try {
       revalidatePath("/");
       revalidatePath("/products");
+      revalidatePath(`/products/${cleanSlug}`);
+      if (existingProduct.slug !== cleanSlug) {
+        revalidatePath(`/products/${existingProduct.slug}`);
+      }
     } catch (_) {}
 
     return NextResponse.json({

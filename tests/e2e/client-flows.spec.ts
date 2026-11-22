@@ -444,4 +444,63 @@ test.describe("Fluxos Completos do Cliente - Overclock Store", () => {
     await expect(page.locator("h1, h2")).toContainText("Esqueceu sua senha?");
     await expect(page.locator("input[type='email']")).toBeVisible();
   });
+
+  test("11. Página de Produto: Abertura resiliente com slug decodificado e variantes Uso Único e Lifetime", async ({ page }) => {
+    // Mock do endpoint /api/products/spoofer-oxine e /api/products/spoofer%20oxine
+    await page.route("**/api/products/*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          product: {
+            id: "prod-spoofer-oxine-e2e",
+            name: "Oxine Spoofer Permanent",
+            slug: "spoofer-oxine",
+            category: "Utilitários",
+            tagline: "Limpeza de rastros e spoofing permanente",
+            description: "Software para spoofing de hardware completo sem necessidade de formatação.",
+            status: "ONLINE",
+            currentVersion: "3.0.0",
+            stockCount: 15,
+            images: [],
+            features: ["Clean HWID", "Suporte a placas ASUS e MSI"],
+            variants: [
+              {
+                id: "var-one-time",
+                name: "Uso Único",
+                priceCents: 8990,
+                stockCount: 5,
+                isLifetime: false,
+                durationType: "ONE_TIME",
+              },
+              {
+                id: "var-lifetime",
+                name: "Lifetime",
+                priceCents: 19990,
+                stockCount: 10,
+                isLifetime: true,
+                durationType: "LIFETIME",
+              },
+            ],
+          },
+        }),
+      });
+    });
+
+    // Acessa via URL codificada /products/spoofer%20oxine
+    await page.goto("/products/spoofer%20oxine");
+
+    // Deve carregar os dados do produto sem erro 404
+    await expect(page.locator("h1")).toContainText("Spoofer Oxine Permanent");
+
+    // As variantes 'Uso Único' e 'Lifetime' devem estar visíveis e selecionáveis
+    await expect(page.locator("body")).toContainText("Uso Único");
+    await expect(page.locator("body")).toContainText("Lifetime");
+    await expect(page.locator("body")).toContainText("R$ 89,90");
+    await expect(page.locator("body")).toContainText("R$ 135,00");
+
+    // Não deve conter textos quebrados como "0 dias"
+    await expect(page.locator("body")).not.toContainText("0 dias");
+  });
 });

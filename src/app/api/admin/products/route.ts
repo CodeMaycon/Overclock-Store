@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-auth";
 import { releaseExpiredReservations } from "@/lib/reservation";
 import { ProductStatus, DurationType, StockType } from "@prisma/client";
+import { slugify } from "@/lib/slug";
+import { revalidatePath } from "next/cache";
 
 // GET /api/admin/products - Lista todos os produtos com estoque real
 export async function GET() {
@@ -97,7 +99,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+    const cleanSlug = slugify(slug || name);
+
+    if (!cleanSlug) {
+      return NextResponse.json(
+        { error: "Slug inválido gerado para o produto." },
+        { status: 400 }
+      );
+    }
 
     // Checa se o slug já existe
     const existing = await prisma.product.findUnique({
@@ -186,13 +195,18 @@ export async function POST(req: NextRequest) {
 
       for (let i = 0; i < variantsToCreate.length; i++) {
         const v = variantsToCreate[i];
-        const dVal = v.durationValue !== undefined 
-          ? Number(v.durationValue) 
-          : (v.durationHours !== undefined ? Number(v.durationHours) : 24);
-
+        
         let dType = v.durationType as DurationType;
-        if (!dType) {
-          if (v.isLifetime || dVal >= 800000 || dVal === 0) {
+        let dVal = Number(v.durationValue ?? v.durationHours ?? 0);
+
+        if (v.durationType === "ONE_TIME" || v.type === "ONE_TIME" || v.name?.toLowerCase().includes("uso único")) {
+          dType = DurationType.ONE_TIME;
+          dVal = 0;
+        } else if (v.durationType === "LIFETIME" || v.type === "LIFETIME" || v.isLifetime || v.name?.toLowerCase().includes("vitalíci") || v.name?.toLowerCase().includes("lifetime")) {
+          dType = DurationType.LIFETIME;
+          dVal = 0;
+        } else if (!dType) {
+          if (dVal >= 800000 || dVal === 0) {
             dType = DurationType.LIFETIME;
           } else if (dVal % 24 === 0 && dVal > 24) {
             dType = DurationType.DAYS;
@@ -204,19 +218,26 @@ export async function POST(req: NextRequest) {
         await tx.productVariant.create({
           data: {
             productId: product.id,
-            name: v.name,
+            name: v.name || (dType === "ONE_TIME" ? "Uso Único" : dType === "LIFETIME" ? "Lifetime" : "Licença"),
             durationValue: dVal,
             durationType: dType,
-            priceCents: Math.round(Number(v.priceCents)),
+            priceCents: Math.round(Number(v.priceCents || 0)),
             compareAtPriceCents: v.compareAtPriceCents ? Math.round(Number(v.compareAtPriceCents)) : null,
             stockType: StockType.BATCH,
             orderPriority: i + 1,
+            isActive: v.isActive !== undefined ? Boolean(v.isActive) : true,
           },
         });
       }
 
       return product;
     });
+
+    try {
+      revalidatePath("/");
+      revalidatePath("/products");
+      revalidatePath(`/products/${cleanSlug}`);
+    } catch (_) {}
 
     return NextResponse.json({
       success: true,

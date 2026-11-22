@@ -12,18 +12,28 @@ export default function CatalogPage() {
   const [sortBy, setSortBy] = useState("bestsellers");
   const [layoutMode, setLayoutMode] = useState<"grid-3" | "grid-4" | "list">("grid-3");
 
+  const [dbCategories, setDbCategories] = useState<string[]>([]);
+
   useEffect(() => {
     async function loadCatalog() {
       try {
-        const res = await fetch("/api/products");
-        const data = await res.json();
-        if (data.success && Array.isArray(data.products)) {
-          setProductsList(data.products);
+        const [prodRes, catRes] = await Promise.all([
+          fetch("/api/products"),
+          fetch("/api/categories"),
+        ]);
+        const prodData = await prodRes.json();
+        if (prodData.success && Array.isArray(prodData.products)) {
+          setProductsList(prodData.products);
         } else {
           setProductsList([]);
         }
+
+        const catData = await catRes.json();
+        if (catData.success && Array.isArray(catData.categories)) {
+          setDbCategories(catData.categories.map((c: any) => c.name));
+        }
       } catch (err) {
-        console.error("Erro ao carregar catálogo do banco:", err);
+        console.error("Erro ao carregar catálogo ou categorias do banco:", err);
         setProductsList([]);
       } finally {
         setIsLoading(false);
@@ -33,8 +43,10 @@ export default function CatalogPage() {
   }, []);
 
   const categories = useMemo(() => {
-    return Array.from(new Set(productsList.map((p) => p.category).filter(Boolean)));
-  }, [productsList]);
+    const listCats = productsList.map((p) => p.category).filter(Boolean);
+    const combined = Array.from(new Set([...dbCategories, ...listCats]));
+    return combined;
+  }, [dbCategories, productsList]);
 
   // Filtro e Ordenação
   const filteredProducts = useMemo(() => {

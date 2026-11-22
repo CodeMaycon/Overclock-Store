@@ -30,6 +30,7 @@ enum DurationType {
   HOURS
   DAYS
   LIFETIME
+  ONE_TIME
 }
 
 enum StockType {
@@ -558,3 +559,20 @@ model Blacklist {
   @@unique([type, value])
   @@index([type, value])
 }
+
+// ----------------------------------------------------
+// CATEGORIAS GERENCIÁVEIS
+// ----------------------------------------------------
+
+model Category {
+  id            String    @id @default(uuid())
+  name          String    @unique
+  slug          String    @unique
+  description   String?
+  orderPriority Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([slug])
+}
+
