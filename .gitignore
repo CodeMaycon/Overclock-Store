@@ -43,3 +43,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# bot-discord
+bot-discord/node_modules/
+bot-discord/dist/
+bot-discord/.env
+
