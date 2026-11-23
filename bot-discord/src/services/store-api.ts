@@ -182,6 +182,92 @@ export class StoreApiClient {
   async getOrder(orderId: string): Promise<GetOrderResponse> {
     return this.request<GetOrderResponse>(`/api/bot/orders/${encodeURIComponent(orderId)}`);
   }
+
+  /**
+   * Atualiza o status de um produto via endpoint administrativo
+   */
+  async updateProductStatus(
+    slug: string,
+    status: string,
+    actorDiscordId?: string
+  ): Promise<UpdateProductStatusResponse> {
+    return this.request<UpdateProductStatusResponse>(
+      `/api/bot/admin/products/${encodeURIComponent(slug)}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status, actorDiscordId }),
+      }
+    );
+  }
+
+  /**
+   * Adiciona chaves de licença ao estoque de uma variante
+   */
+  async addStock(
+    variantId: string,
+    keys: string[],
+    actorDiscordId?: string
+  ): Promise<AddStockResponse> {
+    return this.request<AddStockResponse>("/api/bot/admin/stock", {
+      method: "POST",
+      body: JSON.stringify({ variantId, keys, actorDiscordId }),
+    });
+  }
+
+  /**
+   * Obtém resumo operacional das vendas, pedidos e estoque para a Staff
+   */
+  async getAdminSummary(): Promise<BotAdminSummaryResponse> {
+    return this.request<BotAdminSummaryResponse>("/api/bot/admin/summary");
+  }
+}
+
+export interface UpdateProductStatusResponse {
+  success: boolean;
+  slug: string;
+  name: string;
+  status: string;
+}
+
+export interface AddStockResponse {
+  success: boolean;
+  productName: string;
+  variantName: string;
+  addedCount: number;
+  skippedCount: number;
+  currentStock: number;
+}
+
+export interface LowStockVariant {
+  id: string;
+  productName: string;
+  productSlug: string;
+  variantName: string;
+  priceFormatted: string;
+  stock: number;
+  isZeroStock: boolean;
+}
+
+export interface BotAdminSummaryResponse {
+  success: boolean;
+  today: {
+    count: number;
+    totalCents: number;
+    totalFormatted: string;
+  };
+  last7Days: {
+    count: number;
+    totalCents: number;
+    totalFormatted: string;
+  };
+  last30Days: {
+    count: number;
+    totalCents: number;
+    totalFormatted: string;
+  };
+  pendingOrdersCount: number;
+  lowStockVariants: LowStockVariant[];
 }
 
 export const storeApi = new StoreApiClient();
+
