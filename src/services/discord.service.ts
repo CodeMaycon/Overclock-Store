@@ -97,20 +97,23 @@ export class DiscordService {
    * Adiciona o usuário ao servidor e concede os cargos especificados
    */
   static async syncRoles(discordId: string, additionalRoleIds: string[] = [], accessToken?: string): Promise<boolean> {
-    if (!this.botToken || !this.guildId) {
-      console.info(`[DISCORD_DEV_LOG] Simulação: Cargos [${additionalRoleIds.join(", ")}] sincronizados para Discord ID ${discordId} (Bot token/guild não configurados).`);
-      return true;
+    const rolesToAdd = new Set<string>();
+    if (this.verifiedRoleId) rolesToAdd.add(this.verifiedRoleId);
+    if (this.customerRoleId) rolesToAdd.add(this.customerRoleId);
+    for (const r of additionalRoleIds) {
+      if (r) rolesToAdd.add(r);
     }
 
-    const rolesToAdd = new Set<string>();
-    // Concede no máximo o Cargo Verificado oficial
-    if (this.verifiedRoleId) rolesToAdd.add(this.verifiedRoleId);
+    if (!this.botToken || !this.guildId || this.botToken.startsWith("seu_") || this.guildId.startsWith("id_")) {
+      console.info(`[DISCORD_DEV_LOG] Simulação: Cargos [${Array.from(rolesToAdd).join(", ")}] sincronizados para Discord ID ${discordId} (Bot token/guild não configurados).`);
+      return true;
+    }
 
     try {
       // 1. Tenta adicionar usuário na guilda caso tenhamos o accessToken OAuth2
       if (accessToken) {
         try {
-          await fetch(`https://discord.com/api/guilds/${this.guildId}/members/${discordId}`, {
+          await fetch(`https://discord.com/api/v10/guilds/${this.guildId}/members/${discordId}`, {
             method: "PUT",
             headers: {
               Authorization: `Bot ${this.botToken}`,
@@ -126,7 +129,7 @@ export class DiscordService {
 
       // 2. Concede cada cargo individualmente via API do Bot
       for (const roleId of Array.from(rolesToAdd)) {
-        const url = `https://discord.com/api/guilds/${this.guildId}/members/${discordId}/roles/${roleId}`;
+        const url = `https://discord.com/api/v10/guilds/${this.guildId}/members/${discordId}/roles/${roleId}`;
         const res = await fetch(url, {
           method: "PUT",
           headers: {

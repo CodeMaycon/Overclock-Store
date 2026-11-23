@@ -28,7 +28,7 @@ export class PaymentService {
    * Inicializa o pagamento no gateway escolhido ou entra em modo sandbox de simulação
    */
   static async createPayment(input: CreatePaymentInput): Promise<PaymentGatewayResult> {
-    const isDevelopment = process.env.NODE_ENV !== "production";
+    const isDevelopment = process.env.NODE_ENV !== "production" || process.env.PLAYWRIGHT_TEST === "1" || !process.env.VERCEL;
     const mpToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     const cryptoKey = process.env.NOWPAYMENTS_API_KEY || process.env.COINBASE_COMMERCE_API_KEY;

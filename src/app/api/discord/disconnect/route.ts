@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ActorType } from "@prisma/client";
+import { getDiscordConfig, removeDiscordRole } from "@/lib/discord";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -21,11 +22,16 @@ export async function POST(req: NextRequest) {
   const prevDiscordId = currentUser.discordId;
   const prevDiscordUsername = currentUser.discordUsername;
 
+  const { verifiedRoleId, customerRoleId } = getDiscordConfig();
+  if (verifiedRoleId) await removeDiscordRole(prevDiscordId, verifiedRoleId);
+  if (customerRoleId) await removeDiscordRole(prevDiscordId, customerRoleId);
+
   await prisma.user.update({
     where: { id: session.user.id },
     data: {
       discordId: null,
       discordUsername: null,
+      discordLinkedAt: null,
       isDiscordVerified: false,
     },
   });

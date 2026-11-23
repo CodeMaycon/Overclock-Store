@@ -161,6 +161,7 @@ export default function CustomerDashboardPage() {
   // Perfil Completo com Discord
   const [clientProfile, setClientProfile] = useState<any>(null);
   const [disconnectingDiscord, setDisconnectingDiscord] = useState(false);
+  const [syncingDiscord, setSyncingDiscord] = useState(false);
 
   // Toast Notifier
   const [dashboardNotice, setDashboardNotice] = useState<string | null>(null);
@@ -215,12 +216,12 @@ export default function CustomerDashboardPage() {
 
   // Desvincular Conta Discord
   const handleDisconnectDiscord = async () => {
-    if (!confirm("Tem certeza que deseja desvincular sua conta do Discord?")) return;
+    if (!confirm("Tem certeza que deseja desvincular sua conta do Discord? Os cargos de membro verificado e cliente serão removidos.")) return;
     setDisconnectingDiscord(true);
     try {
-      const res = await fetch("/api/discord/disconnect", { method: "POST" });
+      const res = await fetch("/api/auth/discord/unlink", { method: "POST" });
       if (res.ok) {
-        showToast("Discord desvinculado com sucesso.");
+        showToast("Conta do Discord desvinculada com sucesso.");
         loadProfile();
       } else {
         showToast("Erro ao desvincular conta do Discord.");
@@ -232,14 +233,45 @@ export default function CustomerDashboardPage() {
     }
   };
 
+  // Sincronizar Cargos do Discord
+  const handleSyncDiscordRoles = async () => {
+    setSyncingDiscord(true);
+    try {
+      const res = await fetch("/api/auth/discord/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || "Cargos sincronizados no Discord com sucesso!");
+      } else {
+        showToast(data.error || "Erro ao sincronizar cargos no Discord.");
+      }
+    } catch (_) {
+      showToast("Erro de comunicação ao sincronizar cargos.");
+    } finally {
+      setSyncingDiscord(false);
+    }
+  };
+
   useEffect(() => {
     loadLicenses();
     loadProfile();
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("discord_success") === "linked") {
-        showToast("Conta Discord vinculada com sucesso! Cargo Verificado atribuído.");
+      const discordParam = params.get("discord");
+      if (discordParam === "linked") {
+        showToast("Conta Discord vinculada com sucesso! Cargo @Verificado entregue.");
+        window.history.replaceState({}, "", "/dashboard");
+      } else if (discordParam === "linked_not_in_guild") {
+        showToast("Conta vinculada! Entre no nosso servidor do Discord para receber o cargo @Verificado.");
+        window.history.replaceState({}, "", "/dashboard");
+      } else if (discordParam === "already_linked") {
+        showToast("Esta conta do Discord já está vinculada a outro usuário da Overclock Store.");
+        window.history.replaceState({}, "", "/dashboard");
+      } else if (discordParam === "error") {
+        showToast("Falha ao autenticar com o Discord. Tente novamente.");
+        window.history.replaceState({}, "", "/dashboard");
+      } else if (params.get("discord_success") === "linked") {
+        showToast("Conta Discord vinculada com sucesso! Cargo @Verificado atribuído.");
         window.history.replaceState({}, "", "/dashboard");
       } else if (params.get("discord_error") === "already_linked_to_another_account") {
         showToast("Esta conta do Discord já está vinculada a outro usuário da Overclock Store.");
@@ -482,19 +514,19 @@ export default function CustomerDashboardPage() {
                   <h4 className="font-['Space_Grotesk'] text-sm font-bold text-white flex items-center gap-2">
                     <span>Vincular Conta Discord Oficial</span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#5865F2]/20 text-[#7983F5] font-bold">
-                      CARGO VERIFICADO AUTOMÁTICO
+                      CARGO @VERIFICADO
                     </span>
                   </h4>
                   <p className="text-xs text-[#86948a] font-['Geist']">
-                    Vincule seu Discord (1:1) para receber automaticamente o cargo de Cliente e acesso aos canais privados do loader.
+                    Vincule seu Discord (1:1) para receber automaticamente o cargo @Verificado no servidor e acesso aos canais exclusivos de clientes.
                   </p>
                 </div>
               </div>
               <a
-                href="/api/discord/connect"
+                href="/api/auth/discord"
                 className="px-4 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#5865F2] hover:bg-[#4752C4] text-white transition-all shadow-md shadow-[#5865F2]/30 flex items-center justify-center gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
               >
-                <span>Conectar com Discord</span>
+                <span>Vincular Discord</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
@@ -890,25 +922,26 @@ export default function CustomerDashboardPage() {
                 </div>
               </div>
 
-              {/* CARD DE VÍNCULO DISCORD 1:1 */}
-              <div className="rounded-2xl bg-[#0b0f0d] p-6 border border-white/8 space-y-4">
+              {/* CARD DE INTEGRAÇÃO DISCORD */}
+              <div data-testid="discord-integration-card" className="rounded-2xl bg-[#0b0f0d] p-6 border border-white/8 space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-white/8">
                   <div>
                     <h3 className="font-['Space_Grotesk'] text-sm font-bold text-white flex items-center gap-2">
                       <span className="text-[#5865F2] font-mono">#</span>
-                      <span>Vínculo com Discord (1:1)</span>
+                      <span>Integração Oficial com o Discord</span>
                     </h3>
                     <p className="text-xs text-[#86948a] font-['Geist'] mt-0.5">
-                      Sincronização de Cargo Verificado e acesso aos canais oficiais da comunidade Overclock.
+                      Vínculo 1:1 seguro para concessão automática de cargos (@Verificado e Cliente) no servidor oficial.
                     </p>
                   </div>
                   {clientProfile?.discordId ? (
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30">
-                      CONECTADO
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>CONECTADO</span>
                     </span>
                   ) : (
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-white/5 text-[#86948a] border border-white/10">
-                      DESCONECTADO
+                      NÃO VINCULADO
                     </span>
                   )}
                 </div>
@@ -916,49 +949,64 @@ export default function CustomerDashboardPage() {
                 {clientProfile?.discordId ? (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#050706] border border-white/5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#5865F2]/20 border border-[#5865F2]/40 flex items-center justify-center text-[#5865F2] font-bold">
+                      <div className="w-10 h-10 rounded-full bg-[#5865F2]/20 border border-[#5865F2]/40 flex items-center justify-center text-[#5865F2] font-bold shrink-0">
                         🎮
                       </div>
-                      <div>
-                        <div className="text-sm font-bold text-white flex items-center gap-2">
-                          <span>{clientProfile.discordTag || "Discord User"}</span>
-                          <span className="text-[10px] font-mono text-[#5865F2] bg-[#5865F2]/10 px-1.5 py-0.5 rounded">
-                            ID: {clientProfile.discordId}
+                      <div className="space-y-1">
+                        <div className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                          <span>@{clientProfile.discordUsername || clientProfile.discordTag || clientProfile.discordId}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 flex items-center gap-1">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            <span>VERIFICADO</span>
                           </span>
                         </div>
-                        <p className="text-xs text-[#86948a]">
-                          Cargos sincronizados automaticamente com suas compras ativas.
+                        <p className="text-xs text-[#86948a] font-mono">
+                          ID: {clientProfile.discordId}
+                          {clientProfile.discordLinkedAt && ` • Vinculado em ${new Date(clientProfile.discordLinkedAt).toLocaleDateString("pt-BR")}`}
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={handleDisconnectDiscord}
-                      disabled={disconnectingDiscord}
-                      className="px-4 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-                    >
-                      {disconnectingDiscord ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <AlertCircle className="w-3.5 h-3.5" />
-                      )}
-                      <span>Desvincular Discord</span>
-                    </button>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                      <button
+                        onClick={handleSyncDiscordRoles}
+                        disabled={syncingDiscord}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#5865F2]/15 hover:bg-[#5865F2]/25 text-[#7983F5] border border-[#5865F2]/30 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        title="Sincronizar cargos caso tenha entrado no servidor após vincular"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${syncingDiscord ? "animate-spin" : ""}`} />
+                        <span>{syncingDiscord ? "Sincronizando..." : "Sincronizar Cargo"}</span>
+                      </button>
+
+                      <button
+                        onClick={handleDisconnectDiscord}
+                        disabled={disconnectingDiscord}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {disconnectingDiscord ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <LogOut className="w-3.5 h-3.5" />
+                        )}
+                        <span>Desvincular</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#050706] border border-white/5">
                     <div>
                       <p className="text-xs text-[#bbcabf] font-['Geist'] leading-relaxed">
-                        Nenhuma conta Discord vinculada à sua licença. Conecte sua conta para receber o cargo de Verificado nos servidores oficiais e suporte ágil.
+                        Nenhuma conta Discord vinculada à sua licença. Conecte sua conta para receber automaticamente o cargo <strong className="text-white">@Verificado</strong> no servidor oficial, além de suporte prioritário e liberação dos canais de clientes.
                       </p>
                       <p className="text-[11px] text-[#86948a] font-mono mt-1">
-                        * Regra 1:1 estrita: Uma conta Discord só pode ser vinculada a uma conta Overclock Store.
+                        * Regra 1:1 estrita: Uma conta Discord só pode ser vinculada a uma única conta na Overclock Store.
                       </p>
                     </div>
                     <a
-                      href="/api/discord/connect"
+                      href="/api/auth/discord"
                       className="px-4 py-2.5 rounded-xl text-xs font-bold font-['Space_Grotesk'] bg-[#5865F2] hover:bg-[#4752C4] text-white transition-all shadow-md shadow-[#5865F2]/30 flex items-center gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
                     >
-                      <span>Conectar Discord</span>
+                      <span>Vincular Discord</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>

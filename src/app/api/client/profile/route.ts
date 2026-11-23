@@ -16,6 +16,7 @@ export async function GET() {
       role: true,
       discordId: true,
       discordUsername: true,
+      discordLinkedAt: true,
       isDiscordVerified: true,
       avatarUrl: true,
       createdAt: true,

@@ -128,6 +128,7 @@ model User {
   googleId           String?   @unique
   discordId          String?   @unique // Vínculo 1:1 rigoroso
   discordUsername    String?
+  discordLinkedAt    DateTime?
   isDiscordVerified  Boolean   @default(false)
   avatarUrl          String?
   
